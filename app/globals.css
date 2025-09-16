@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ring: 210 100% 50%;
+}
+
+body {
+  font-feature-settings: "ss01" 1, "ss02" 1;
+}
+
+/* Scrollbar subtle */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* Flashy assistant animation reminiscent of game show vibe */
+@keyframes jackPulse {
+  0% { text-shadow: 0 0 0px rgba(56,189,248,0.0), 0 0 0px rgba(16,185,129,0.0); filter: hue-rotate(0deg) brightness(1); }
+  30% { text-shadow: 0 0 6px rgba(56,189,248,0.7), 0 0 14px rgba(16,185,129,0.5); }
+  55% { text-shadow: 0 0 10px rgba(56,189,248,0.9), 0 0 24px rgba(16,185,129,0.6); filter: hue-rotate(10deg) brightness(1.15); }
+  70% { text-shadow: 0 0 6px rgba(56,189,248,0.6), 0 0 18px rgba(16,185,129,0.4); }
+  100% { text-shadow: 0 0 0px rgba(56,189,248,0.0), 0 0 0px rgba(16,185,129,0.0); filter: hue-rotate(0deg) brightness(1); }
+}
+
+@keyframes jackReveal {
+  0% { clip-path: inset(0 100% 0 0); opacity:0; }
+  40% { clip-path: inset(0 0 0 0); opacity:1; }
+  100% { opacity:1; }
+}
+
+.jack-flash span:last-child, .jack-flash .assistant-chunk {
+  animation: jackReveal 0.6s cubic-bezier(.22,.91,.3,1) forwards, jackPulse 1.8s 0.25s ease-in-out;
+}
+
+.jack-flash {
+  position: relative;
+}
+
+.jack-flash:before, .jack-flash:after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(120deg, rgba(56,189,248,0.15), rgba(16,185,129,0.05) 40%, rgba(56,189,248,0.15));
+  opacity:0;
+  pointer-events:none;
+  border-radius: 4px;
+  animation: jackPulse 2.2s ease-in-out 0.15s;
+}
+
+.jack-flash:after { filter: blur(6px); }

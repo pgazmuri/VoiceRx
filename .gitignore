@@ -1,0 +1,65 @@
+# --- Dependencies ---
+node_modules/
+
+# --- Build / Output ---
+.next/
+out/
+dist/
+.vercel/
+.vite/
+turbo/
+.cache/
+.tool_cache/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Env / Secrets ---
+.env
+.env.*
+!.env.example
+.key
+
+# --- Editor / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Caches ---
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# --- Tests / Coverage ---
+coverage/
+nyc-output/
+
+# --- Temporary ---
+*.tmp
+*.swp
+*.swo
+*.orig
+*.bak
+tmp/
+
+# --- Media Captures (optional) ---
+recordings/
+*.wav
+*.webm
+
+# --- Local data ---
+*.sqlite
+*.sqlite-journal
+
+# --- Crash dumps ---
+*.dmp
