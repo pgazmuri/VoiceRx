@@ -310,8 +310,8 @@ export default function RealtimeStage() {
           return;
         }
         toolOutputsSentRef.current.add(canonical);
-        if (VERBOSE_TOOL_LOGS) console.log('[EXEC_TOOL]', { canonical, name, argsCandidate });
-         fetch('/api/tool', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: name, args: argsCandidate }) })
+  if (VERBOSE_TOOL_LOGS) console.log('[EXEC_TOOL]', { canonical, name, argsCandidate, scenarioSlice: scenario.slice(0,60) });
+   fetch('/api/tool', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: name, args: argsCandidate, scenario }) })
            .then(r=> r.json())
            .then(result => {
              const resultData = (result && result.result !== undefined) ? result.result : result;
@@ -386,11 +386,12 @@ export default function RealtimeStage() {
       if (VERBOSE_TOOL_LOGS) console.log('[SESSION_START]', { sessionCounter: sessionIdRef.current, sessionUUID: sessionUUIDRef.current });
       const dc = pc.createDataChannel('oai-events');
       dataChannelRef.current = dc;
-      dc.onopen = () => {
+    dc.onopen = () => {
         setConnected(true);
-        if (VERBOSE_TOOL_LOGS) console.log('[SESSION_DATA_CHANNEL_OPEN]', { sessionCounter: sessionIdRef.current, sessionUUID: sessionUUIDRef.current });
-        // Sanitize tool specs for realtime (remove non-standard fields like result_schema/sample_result)
+    if (VERBOSE_TOOL_LOGS) console.log('[SESSION_DATA_CHANNEL_OPEN]', { sessionCounter: sessionIdRef.current, sessionUUID: sessionUUIDRef.current });
+    // Sanitize tool specs for realtime (remove non-standard fields like result_schema/sample_result)
   const rtTools = toolSpecs.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters }));
+  // Scenario intentionally NOT inserted into model instructions; it's only used by tool execution layer.
   dc.send(JSON.stringify({ type: 'session.update', session: { instructions: REALTIME_PROMPT, tools: rtTools, temperature, voice, tool_choice: 'auto' } }));
         // mark starting complete
         sessionStartingRef.current = false; setStarting(false);
@@ -524,11 +525,11 @@ export default function RealtimeStage() {
     }
   }, [scenario, selectedPresetId]);
 
-  // Live session updates when parameters change while connected (scenario excluded from instructions)
+  // Live session updates when parameters change while connected (scenario intentionally excluded from instructions)
   useEffect(()=> {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open' && streaming) {
       const rtTools = toolSpecs.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters }));
-  dataChannelRef.current.send(JSON.stringify({ type: 'session.update', session: { instructions: REALTIME_PROMPT, temperature, voice, tools: rtTools, tool_choice: 'auto' } }));
+      dataChannelRef.current.send(JSON.stringify({ type: 'session.update', session: { instructions: REALTIME_PROMPT, temperature, voice, tools: rtTools, tool_choice: 'auto' } }));
     }
   }, [scenario, temperature, voice, streaming]);
 
