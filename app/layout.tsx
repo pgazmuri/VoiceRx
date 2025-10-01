@@ -6,8 +6,8 @@ import { SettingsProvider } from '@/components/settings-context';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'VoiceRx Realtime PBM Agent',
-  description: 'Agentic Caremark PBM Mail Order Pharmacy demo using OpenAI Realtime API'
+  title: 'VoiceRx - "Any Agent You Want"',
+  description: 'Build any voice agent for any industry using OpenAI Realtime API with dynamic config generation'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,0 +1,1094 @@
+{
+  "id": "airline_ticket_agent",
+  "name": "Airline Ticket Agent",
+  "description": "Domain for shopping flights, holding fares, issuing tickets, retrieving PNRs, making changes, and adding ancillaries (seats, bags, lounge) across domestic and international itineraries.",
+  "prompt": "You are a professional airline ticketing assistant.\n- Be concise, confirm passenger identity (last name + PNR) before booking changes. Use clear time zones and 24-hour or local-time with TZ code.\n- Rely on tool outputs for availability, prices, fare rules, fees, and baggage entitlements. Do not guess or promise upgrades, seats, or prices.\n- Clarify fare restrictions (refundability, change fees, basic fare limitations) before purchase. Summarize total due in currency provided by tools.\n- Do not request or store full card numbers; only accept tokenized payment references. Redact sensitive data.\n- Avoid immigration, legal, or medical advice. For complex exceptions or irregular ops not covered by tools, flag for human review.\n- Use plain, professional language; confirm actions before ticketing or charging.",
+  "tools": [
+    {
+      "name": "search_flights",
+      "description": "Search available flight options with pricing and basic fare rules.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "origin",
+          "destination",
+          "depart_date",
+          "pax"
+        ],
+        "properties": {
+          "origin": {
+            "type": "string",
+            "description": "IATA code, e.g., LAX"
+          },
+          "destination": {
+            "type": "string",
+            "description": "IATA code, e.g., JFK"
+          },
+          "depart_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "return_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD (optional)"
+          },
+          "cabin": {
+            "type": "string",
+            "description": "ECONOMY | PREMIUM_ECONOMY | BUSINESS | FIRST"
+          },
+          "pax": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "count"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "ADT | CHD | INF"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "nonstops_only": {
+            "type": "boolean"
+          },
+          "airline_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency, e.g., USD"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "currency",
+          "options"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "option_id",
+                "price_total",
+                "segments"
+              ],
+              "properties": {
+                "option_id": {
+                  "type": "string"
+                },
+                "price_total": {
+                  "type": "number"
+                },
+                "price_breakdown": {
+                  "type": "object",
+                  "properties": {
+                    "base_fare": {
+                      "type": "number"
+                    },
+                    "taxes": {
+                      "type": "number"
+                    },
+                    "fees": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "fare_brand": {
+                  "type": "string",
+                  "description": "BASIC | MAIN | FLEX | PREMIUM | BUSINESS | FIRST"
+                },
+                "refundable": {
+                  "type": "boolean"
+                },
+                "change_fee": {
+                  "type": "number",
+                  "description": "Flat fee; 0 if waived, fare difference may apply"
+                },
+                "baggage_included": {
+                  "type": "integer",
+                  "description": "Checked bags included per pax"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "flight_number",
+                      "marketing_carrier",
+                      "operating_carrier",
+                      "depart_airport",
+                      "arrive_airport",
+                      "depart_time",
+                      "arrive_time",
+                      "duration_minutes",
+                      "cabin",
+                      "fare_class",
+                      "seats_remaining",
+                      "aircraft"
+                    ],
+                    "properties": {
+                      "flight_number": {
+                        "type": "string"
+                      },
+                      "marketing_carrier": {
+                        "type": "string"
+                      },
+                      "operating_carrier": {
+                        "type": "string"
+                      },
+                      "depart_airport": {
+                        "type": "string"
+                      },
+                      "arrive_airport": {
+                        "type": "string"
+                      },
+                      "depart_time": {
+                        "type": "string"
+                      },
+                      "arrive_time": {
+                        "type": "string"
+                      },
+                      "duration_minutes": {
+                        "type": "integer"
+                      },
+                      "aircraft": {
+                        "type": "string"
+                      },
+                      "cabin": {
+                        "type": "string"
+                      },
+                      "fare_class": {
+                        "type": "string"
+                      },
+                      "seats_remaining": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "currency": "USD",
+        "options": [
+          {
+            "option_id": "OPT-LAXJFK-001",
+            "price_total": 987.4,
+            "price_breakdown": {
+              "base_fare": 810,
+              "taxes": 157.4,
+              "fees": 20
+            },
+            "fare_brand": "BASIC",
+            "refundable": false,
+            "change_fee": 99,
+            "baggage_included": 0,
+            "segments": [
+              {
+                "flight_number": "AA118",
+                "marketing_carrier": "AA",
+                "operating_carrier": "AA",
+                "depart_airport": "LAX",
+                "arrive_airport": "JFK",
+                "depart_time": "2025-12-20T22:30-08:00",
+                "arrive_time": "2025-12-21T06:55-05:00",
+                "duration_minutes": 325,
+                "aircraft": "772",
+                "cabin": "ECONOMY",
+                "fare_class": "B",
+                "seats_remaining": 4
+              },
+              {
+                "flight_number": "AA133",
+                "marketing_carrier": "AA",
+                "operating_carrier": "AA",
+                "depart_airport": "JFK",
+                "arrive_airport": "LAX",
+                "depart_time": "2025-12-28T20:00-05:00",
+                "arrive_time": "2025-12-28T23:10-08:00",
+                "duration_minutes": 370,
+                "aircraft": "789",
+                "cabin": "ECONOMY",
+                "fare_class": "B",
+                "seats_remaining": 5
+              }
+            ]
+          },
+          {
+            "option_id": "OPT-LAXJFK-002",
+            "price_total": 1214.3,
+            "price_breakdown": {
+              "base_fare": 1005,
+              "taxes": 189.3,
+              "fees": 20
+            },
+            "fare_brand": "MAIN",
+            "refundable": false,
+            "change_fee": 0,
+            "baggage_included": 1,
+            "segments": [
+              {
+                "flight_number": "DL424",
+                "marketing_carrier": "DL",
+                "operating_carrier": "DL",
+                "depart_airport": "LAX",
+                "arrive_airport": "JFK",
+                "depart_time": "2025-12-20T23:15-08:00",
+                "arrive_time": "2025-12-21T07:35-05:00",
+                "duration_minutes": 320,
+                "aircraft": "321",
+                "cabin": "ECONOMY",
+                "fare_class": "Y",
+                "seats_remaining": 7
+              },
+              {
+                "flight_number": "DL413",
+                "marketing_carrier": "DL",
+                "operating_carrier": "DL",
+                "depart_airport": "JFK",
+                "arrive_airport": "LAX",
+                "depart_time": "2025-12-28T18:45-05:00",
+                "arrive_time": "2025-12-28T22:20-08:00",
+                "duration_minutes": 335,
+                "aircraft": "739",
+                "cabin": "ECONOMY",
+                "fare_class": "Y",
+                "seats_remaining": 6
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_hold",
+      "description": "Place a time-limited hold on a priced option for specified passengers.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "option_id",
+          "passengers",
+          "contact"
+        ],
+        "properties": {
+          "option_id": {
+            "type": "string"
+          },
+          "passengers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "first_name",
+                "last_name",
+                "type"
+              ],
+              "properties": {
+                "first_name": {
+                  "type": "string"
+                },
+                "last_name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "ADT | CHD | INF"
+                },
+                "dob": {
+                  "type": "string"
+                },
+                "known_traveler_number": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contact": {
+            "type": "object",
+            "required": [
+              "email",
+              "phone"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          },
+          "hold_duration_hours": {
+            "type": "integer",
+            "description": "Requested hold window; actual may vary"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "hold_id",
+          "option_id",
+          "currency",
+          "total_price",
+          "expires_at"
+        ],
+        "properties": {
+          "hold_id": {
+            "type": "string"
+          },
+          "option_id": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "total_price": {
+            "type": "number"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "hold_id": "HOLD-2025-11-15-00072",
+        "option_id": "OPT-LAXJFK-002",
+        "currency": "USD",
+        "total_price": 1214.3,
+        "expires_at": "2025-11-16T03:00:00Z",
+        "notes": "Names must match government IDs. Free 24-hour cancel applies per DOT if ticketed today."
+      }
+    },
+    {
+      "name": "issue_ticket",
+      "description": "Purchase and issue electronic tickets from a hold or option.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "hold_id",
+          "payment_token",
+          "billing_zip",
+          "accept_fare_rules"
+        ],
+        "properties": {
+          "hold_id": {
+            "type": "string"
+          },
+          "payment_token": {
+            "type": "string",
+            "description": "Tokenized reference (e.g., tok_*)"
+          },
+          "billing_zip": {
+            "type": "string"
+          },
+          "accept_fare_rules": {
+            "type": "boolean"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "ticket_numbers",
+          "currency",
+          "total_charged",
+          "seats",
+          "receipt_url"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "ticket_numbers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "passenger",
+                "ticket_number"
+              ],
+              "properties": {
+                "passenger": {
+                  "type": "string"
+                },
+                "ticket_number": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "currency": {
+            "type": "string"
+          },
+          "total_charged": {
+            "type": "number"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "segment_flight",
+                "seat"
+              ],
+              "properties": {
+                "segment_flight": {
+                  "type": "string",
+                  "description": "e.g., DL424 2025-12-20"
+                },
+                "seat": {
+                  "type": "string"
+                },
+                "passenger": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "receipt_url": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "pnr": "Q7X2PL",
+        "ticket_numbers": [
+          {
+            "passenger": "JOHN DOE",
+            "ticket_number": "0061234567890"
+          },
+          {
+            "passenger": "MARY DOE",
+            "ticket_number": "0061234567891"
+          },
+          {
+            "passenger": "TIMMY DOE",
+            "ticket_number": "0061234567892"
+          }
+        ],
+        "currency": "USD",
+        "total_charged": 1214.3,
+        "seats": [
+          {
+            "segment_flight": "DL424 2025-12-20",
+            "seat": "24C",
+            "passenger": "JOHN DOE"
+          },
+          {
+            "segment_flight": "DL424 2025-12-20",
+            "seat": "24D",
+            "passenger": "MARY DOE"
+          },
+          {
+            "segment_flight": "DL424 2025-12-20",
+            "seat": "24E",
+            "passenger": "TIMMY DOE"
+          },
+          {
+            "segment_flight": "DL413 2025-12-28",
+            "seat": "22C",
+            "passenger": "JOHN DOE"
+          },
+          {
+            "segment_flight": "DL413 2025-12-28",
+            "seat": "22D",
+            "passenger": "MARY DOE"
+          },
+          {
+            "segment_flight": "DL413 2025-12-28",
+            "seat": "22E",
+            "passenger": "TIMMY DOE"
+          }
+        ],
+        "receipt_url": "https://receipts.exampleair.com/Q7X2PL"
+      }
+    },
+    {
+      "name": "retrieve_booking",
+      "description": "Retrieve a booking (PNR) and show ticket/segment status and entitlements.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "passengers",
+          "segments",
+          "currency",
+          "total_paid"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "passengers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "ticket_number"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "ticket_number": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "TICKETED | HELD | CANCELED"
+                }
+              }
+            }
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "flight_number",
+                "date",
+                "from",
+                "to",
+                "depart_time",
+                "arrive_time",
+                "status"
+              ],
+              "properties": {
+                "flight_number": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "depart_time": {
+                  "type": "string"
+                },
+                "arrive_time": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "CONFIRMED | CHANGED | CANCELED"
+                },
+                "cabin": {
+                  "type": "string"
+                },
+                "seat_assignments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "passenger": {
+                        "type": "string"
+                      },
+                      "seat": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "fare_brand": {
+            "type": "string"
+          },
+          "baggage_included": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "total_paid": {
+            "type": "number"
+          },
+          "ancillaries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "details": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "pnr": "Q7X2PL",
+        "passengers": [
+          {
+            "name": "JOHN DOE",
+            "ticket_number": "0061234567890",
+            "status": "TICKETED"
+          },
+          {
+            "name": "MARY DOE",
+            "ticket_number": "0061234567891",
+            "status": "TICKETED"
+          },
+          {
+            "name": "TIMMY DOE",
+            "ticket_number": "0061234567892",
+            "status": "TICKETED"
+          }
+        ],
+        "segments": [
+          {
+            "flight_number": "DL424",
+            "date": "2025-12-20",
+            "from": "LAX",
+            "to": "JFK",
+            "depart_time": "2025-12-20T23:15-08:00",
+            "arrive_time": "2025-12-21T07:35-05:00",
+            "status": "CONFIRMED",
+            "cabin": "ECONOMY",
+            "seat_assignments": [
+              {
+                "passenger": "JOHN DOE",
+                "seat": "24C"
+              },
+              {
+                "passenger": "MARY DOE",
+                "seat": "24D"
+              },
+              {
+                "passenger": "TIMMY DOE",
+                "seat": "24E"
+              }
+            ]
+          },
+          {
+            "flight_number": "DL413",
+            "date": "2025-12-28",
+            "from": "JFK",
+            "to": "LAX",
+            "depart_time": "2025-12-28T18:45-05:00",
+            "arrive_time": "2025-12-28T22:20-08:00",
+            "status": "CONFIRMED",
+            "cabin": "ECONOMY",
+            "seat_assignments": [
+              {
+                "passenger": "JOHN DOE",
+                "seat": "22C"
+              },
+              {
+                "passenger": "MARY DOE",
+                "seat": "22D"
+              },
+              {
+                "passenger": "TIMMY DOE",
+                "seat": "22E"
+              }
+            ]
+          }
+        ],
+        "fare_brand": "MAIN",
+        "baggage_included": 1,
+        "currency": "USD",
+        "total_paid": 1214.3,
+        "ancillaries": []
+      }
+    },
+    {
+      "name": "change_booking",
+      "description": "Quote or confirm changes to an existing booking (date/time/flight), with fees and fare difference.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "change_type": {
+            "type": "string",
+            "description": "REBOOK | SAME_DAY | DATE_CHANGE"
+          },
+          "requested": {
+            "type": "object",
+            "properties": {
+              "depart_date": {
+                "type": "string"
+              },
+              "flight_number": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "cabin": {
+                "type": "string"
+              }
+            }
+          },
+          "confirm_option_id": {
+            "type": "string",
+            "description": "If provided, confirms and applies the quoted change"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "option_id",
+                "segments",
+                "price_difference",
+                "change_fee",
+                "total_due",
+                "waiver_applied"
+              ],
+              "properties": {
+                "option_id": {
+                  "type": "string"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "flight_number",
+                      "from",
+                      "to",
+                      "depart_time",
+                      "arrive_time",
+                      "cabin"
+                    ],
+                    "properties": {
+                      "flight_number": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      },
+                      "depart_time": {
+                        "type": "string"
+                      },
+                      "arrive_time": {
+                        "type": "string"
+                      },
+                      "cabin": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "price_difference": {
+                  "type": "number"
+                },
+                "change_fee": {
+                  "type": "number"
+                },
+                "total_due": {
+                  "type": "number"
+                },
+                "waiver_applied": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "updated": {
+            "type": "object",
+            "properties": {
+              "pnr": {
+                "type": "string"
+              },
+              "amount_charged": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "new_segments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "flight_number": {
+                      "type": "string"
+                    },
+                    "depart_time": {
+                      "type": "string"
+                    },
+                    "arrive_time": {
+                      "type": "string"
+                    },
+                    "cabin": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "options": [
+          {
+            "option_id": "CHG-BA-LHRDXB-01",
+            "segments": [
+              {
+                "flight_number": "BA105",
+                "from": "LHR",
+                "to": "DXB",
+                "depart_time": "2025-10-14T10:15+01:00",
+                "arrive_time": "2025-10-14T21:10+04:00",
+                "cabin": "BUSINESS"
+              }
+            ],
+            "price_difference": 0,
+            "change_fee": 0,
+            "total_due": 0,
+            "waiver_applied": true,
+            "message": "Rebook due to schedule change; fee waived."
+          },
+          {
+            "option_id": "CHG-BA-LHRDXB-02",
+            "segments": [
+              {
+                "flight_number": "BA107",
+                "from": "LHR",
+                "to": "DXB",
+                "depart_time": "2025-10-14T14:05+01:00",
+                "arrive_time": "2025-10-15T01:05+04:00",
+                "cabin": "BUSINESS"
+              }
+            ],
+            "price_difference": 0,
+            "change_fee": 0,
+            "total_due": 0,
+            "waiver_applied": true,
+            "message": "Keep same flight, new time."
+          }
+        ]
+      }
+    },
+    {
+      "name": "add_ancillary",
+      "description": "Add ancillaries like seats, bags, or lounge access to an existing PNR.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name",
+          "items"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "SEAT | BAG | LOUNGE"
+                },
+                "details": {
+                  "type": "object",
+                  "properties": {
+                    "segment_flight": {
+                      "type": "string",
+                      "description": "e.g., UA1180 2025-10-03"
+                    },
+                    "passenger": {
+                      "type": "string"
+                    },
+                    "seat": {
+                      "type": "string"
+                    },
+                    "bag_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "currency",
+          "total_charged",
+          "line_items"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "total_charged": {
+            "type": "number"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "amount",
+                "details"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "details": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "updated_seats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "segment_flight": {
+                  "type": "string"
+                },
+                "passenger": {
+                  "type": "string"
+                },
+                "seat": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "currency": "USD",
+        "total_charged": 74,
+        "line_items": [
+          {
+            "type": "SEAT",
+            "amount": 39,
+            "details": "Economy Plus seat 7C on UA1180 2025-10-03 for CARLOS MENDOZA"
+          },
+          {
+            "type": "BAG",
+            "amount": 35,
+            "details": "1 additional checked bag for CARLOS MENDOZA"
+          }
+        ],
+        "updated_seats": [
+          {
+            "segment_flight": "UA1180 2025-10-03",
+            "passenger": "CARLOS MENDOZA",
+            "seat": "7C"
+          }
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "lax_jfk_family_roundtrip_2025",
+      "name": "Family Roundtrip LAX-JFK with Fare Hold and Ticketing",
+      "text": "Search Date: 2025-11-15. Route: LAX -> JFK (2025-12-20), return 2025-12-28. Pax: 2 ADT, 1 CHD; Cabin: ECONOMY; Nonstop only; Currency USD.\nSearch returns two options:\n- OPT-LAXJFK-001: AA118 LAX 2025-12-20T22:30-08:00 -> JFK 2025-12-21T06:55-05:00 and AA133 JFK 2025-12-28T20:00-05:00 -> LAX 2025-12-28T23:10-08:00; Fare BRAND BASIC; price_total 987.40; change_fee 99; baggage_included 0; nonrefundable.\n- OPT-LAXJFK-002: DL424 LAX 2025-12-20T23:15-08:00 -> JFK 2025-12-21T07:35-05:00 and DL413 JFK 2025-12-28T18:45-05:00 -> LAX 2025-12-28T22:20-08:00; Fare BRAND MAIN; price_total 1214.30; change_fee 0 (fare difference may apply); baggage_included 1; nonrefundable.\nHold placed on OPT-LAXJFK-002 for passengers JOHN DOE (ADT), MARY DOE (ADT), TIMMY DOE (CHD, DOB 2015-04-12); contact john.doe@example.com, +13105551212; hold_duration_hours 24. HOLD-2025-11-15-00072 created; total_price 1214.30 USD; expires 2025-11-16T03:00:00Z.\nTicketing: issue on HOLD-2025-11-15-00072 with payment token tok_visa_41c9, billing zip 90045, accept rules true. Result PNR Q7X2PL with tickets 0061234567890/91/92; seats DL424 2025-12-20 24C/24D/24E and DL413 2025-12-28 22C/22D/22E; receipt https://receipts.exampleair.com/Q7X2PL; total_charged USD 1214.30."
+    },
+    {
+      "id": "lhr_dxb_biz_sched_change_2025",
+      "name": "LHR-DXB Business Rebook Due to Schedule Change",
+      "text": "Passenger: PRIYA SHAH. PNR: H9M3KT. Last name SHAH. Original ticket: 1254567890123 on BA107 LHR->DXB Business on 2025-10-14 (old time 12:35). Airline moved BA107 to 14:05.\nRetrieve shows: Fare BRAND BUSINESS, total_paid GBP 1640.00, baggage_included 2. Segment BA107 2025-10-14 LHR 14:05+01:00 -> DXB 01:05+04:00 CONFIRMED.\nChange request: REBOOK to earlier same day; cabin BUSINESS; from LHR to DXB on 2025-10-14. change_booking returns:\n- CHG-BA-LHRDXB-01: BA105 LHR 2025-10-14T10:15+01:00 -> DXB 2025-10-14T21:10+04:00; price_difference 0; change_fee 0; total_due 0; waiver_applied true; message \"Rebook due to schedule change; fee waived.\"\n- CHG-BA-LHRDXB-02: BA107 keep new time 14:05 -> 01:05+1; price_difference 0; fee 0; total_due 0.\nConfirmation applied for CHG-BA-LHRDXB-01: updated itinerary keeps PNR H9M3KT; amount_charged 0 GBP; new segment BA105 Business seat 8A assigned for SHAH; status CONFIRMED. Retrieve after change reflects BA105 10:15 -> 21:10, seat 8A, ancillaries unchanged."
+    },
+    {
+      "id": "ord_bos_same_day_change_corp_2025",
+      "name": "ORD-BOS Same-Day Change with Seat and Bag",
+      "text": "Passenger: CARLOS MENDOZA (Premier Gold, corporate Flex fare). PNR: D3P8NV. Last name MENDOZA. Original segment: UA1520 ORD 2025-10-03T17:30-05:00 -> BOS 2025-10-03T20:58-04:00, ECONOMY, seat 21D, fare_brand FLEX, baggage_included 1. Total_paid USD 289.00.\nSame-day change request on 2025-10-03 to earlier flight. change_booking (SAME_DAY) requested UA1180 ORD->BOS 2025-10-03. Quote options:\n- CHG-UA-ORD-BOS-01: UA1180 ORD 2025-10-03T15:00-05:00 -> BOS 2025-10-03T18:22-04:00, ECONOMY; price_difference 0; change_fee 75; total_due 0; waiver_applied true (elite waiver); message \"SDS fee waived for Premier Gold.\"\nConfirmed CHG-UA-ORD-BOS-01: updated PNR D3P8NV; amount_charged 0 USD; new segment UA1180 confirmed.\nAncillaries added: SEAT Economy Plus 7C on UA1180 2025-10-03 for CARLOS MENDOZA for USD 39; BAG 1 extra checked bag for USD 35. add_ancillary returns total_charged USD 74; updated_seats shows UA1180 2025-10-03 seat 7C."
+    }
+  ],
+  "defaultScenarioId": "lax_jfk_family_roundtrip_2025"
+}

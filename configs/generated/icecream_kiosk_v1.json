@@ -1,0 +1,448 @@
+{
+  "id": "icecream_kiosk_v1",
+  "name": "Ice Cream Shop Kiosk Agent",
+  "description": "Self-service kiosk agent for an ice cream shop that authenticates returning customers, checks flavor availability by SKU code, builds orders (1/2/3 scoop with cup or cone, optional sprinkles or fudge), and performs checkout.",
+  "prompt": "You are an efficient, friendly ice cream kiosk assistant. Behave concisely and confirm key details: customer authentication (3-digit customer ID + last 4 of on-file card), flavor selection by 4-digit code, scoop count, vessel (cup or cone), and add-ons (sprinkles, fudge). Always verify availability before adding a flavor. If authentication fails, prompt to retry or continue as guest. Present prices and running totals; do not access or reveal full card numbers. Do not make medical, legal, or safety claims. Use polite, clear short sentences and ask only for information required to complete the order. Flavors (codes): 1001 Vanilla, 1002 Chocolate, 1003 Strawberry, 1004 Mint Chip, 1005 Cookies & Cream, 1006 Salted Caramel, 1007 Pistachio, 1008 Mango, 1009 Coffee, 1010 Lemon Sorbet, 1011 Brownie Batter, 1012 Birthday Cake.",
+  "tools": [
+    {
+      "name": "authenticate_customer",
+      "description": "Verify a returning customer by 3-digit customer ID and last four digits of their on-file credit card.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "customer_id",
+          "card_last4"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "description": "Three-digit customer identifier (e.g., '042')."
+          },
+          "card_last4": {
+            "type": "string",
+            "description": "Last four digits of the customer's stored credit card."
+          },
+          "store_id": {
+            "type": "string",
+            "description": "Optional store identifier where authentication is attempted."
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "authenticated",
+          "customer_id",
+          "display_name"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Name shown on the kiosk after authentication (first name preferred)."
+          },
+          "loyalty_tier": {
+            "type": "string",
+            "description": "Optional loyalty tier: NONE | SILVER | GOLD | PLATINUM"
+          },
+          "last4_on_file": {
+            "type": "string",
+            "description": "Echo of the last 4 digits on file (for confirmation)."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "authenticated": true,
+        "customer_id": "042",
+        "display_name": "Avery",
+        "loyalty_tier": "GOLD",
+        "last4_on_file": "4242",
+        "message": "Welcome back, Avery! Loyalty: GOLD. Earn double points today."
+      }
+    },
+    {
+      "name": "check_flavor_availability",
+      "description": "Check stock and scoop availability for a flavor SKU at a specific store.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "flavor_sku",
+          "store_id"
+        ],
+        "properties": {
+          "flavor_sku": {
+            "type": "string",
+            "description": "Four-digit flavor code (e.g., '1001')."
+          },
+          "store_id": {
+            "type": "string",
+            "description": "Store identifier (e.g., 'STORE-07')."
+          },
+          "date_time": {
+            "type": "string",
+            "description": "Optional ISO timestamp to check stock at a particular time."
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "flavor_sku",
+          "flavor_name",
+          "available_scoops",
+          "status"
+        ],
+        "properties": {
+          "flavor_sku": {
+            "type": "string"
+          },
+          "flavor_name": {
+            "type": "string"
+          },
+          "available_scoops": {
+            "type": "integer",
+            "description": "Estimated number of single-scoop servings available."
+          },
+          "status": {
+            "type": "string",
+            "description": "IN_STOCK | LOW_STOCK | OUT_OF_STOCK"
+          },
+          "price_per_scoop": {
+            "type": "number",
+            "description": "Retail price for one scoop in USD."
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "flavor_sku": "1005",
+        "flavor_name": "Cookies & Cream",
+        "available_scoops": 24,
+        "status": "IN_STOCK",
+        "price_per_scoop": 2.5,
+        "notes": "Fresh batch this morning."
+      }
+    },
+    {
+      "name": "add_to_cart",
+      "description": "Add a configured ice cream item (flavor(s), scoop count, vessel, add-ons) to the customer's cart.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "items"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "Session or customer cart identifier."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "item_id",
+                "flavors",
+                "scoop_count",
+                "vessel"
+              ],
+              "properties": {
+                "item_id": {
+                  "type": "string",
+                  "description": "Unique line-item id generated by client or kiosk."
+                },
+                "flavors": {
+                  "type": "array",
+                  "description": "List of flavor SKUs in order of scoops (e.g., for 2 scoops supply two SKUs).",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "scoop_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "vessel": {
+                  "type": "string",
+                  "description": "CUP | CONE"
+                },
+                "sprinkles": {
+                  "type": "boolean"
+                },
+                "fudge": {
+                  "type": "boolean"
+                },
+                "special_instructions": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "items",
+          "cart_total"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                },
+                "flavors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "scoop_count": {
+                  "type": "integer"
+                },
+                "vessel": {
+                  "type": "string"
+                },
+                "sprinkles": {
+                  "type": "boolean"
+                },
+                "fudge": {
+                  "type": "boolean"
+                },
+                "line_price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "cart_total": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "cart_id": "CART-20251001-0007",
+        "items": [
+          {
+            "item_id": "LN-01",
+            "flavors": [
+              "1001"
+            ],
+            "scoop_count": 1,
+            "vessel": "CONE",
+            "sprinkles": false,
+            "fudge": false,
+            "line_price": 3
+          },
+          {
+            "item_id": "LN-02",
+            "flavors": [
+              "1005",
+              "1002"
+            ],
+            "scoop_count": 2,
+            "vessel": "CUP",
+            "sprinkles": true,
+            "fudge": false,
+            "line_price": 6.75
+          }
+        ],
+        "cart_total": 9.75,
+        "message": "2 items in cart. Ready for checkout."
+      }
+    },
+    {
+      "name": "view_cart",
+      "description": "Retrieve the current cart contents and totals.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cart_id"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "items",
+          "subtotal"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "line_price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "tax": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        }
+      },
+      "sampleResult": {
+        "cart_id": "CART-20251001-0007",
+        "items": [
+          {
+            "item_id": "LN-01",
+            "description": "1 scoop Vanilla (1001) in Cone",
+            "line_price": 3
+          },
+          {
+            "item_id": "LN-02",
+            "description": "2 scoops Cookies & Cream (1005), Chocolate (1002) in Cup with Sprinkles",
+            "line_price": 6.75
+          }
+        ],
+        "subtotal": 9.75,
+        "tax": 0.78,
+        "total": 10.53
+      }
+    },
+    {
+      "name": "checkout",
+      "description": "Process payment and finalize the order. Can charge stored card on file for authenticated customers or accept new payment details for guest orders.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "payment_method"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "payment_method": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "CARD_ON_FILE | NEW_CARD | CASH"
+              },
+              "card_last4": {
+                "type": "string",
+                "description": "Required if type is CARD_ON_FILE or NEW_CARD (last4)."
+              },
+              "auth_token": {
+                "type": "string",
+                "description": "Optional token from card entry device for NEW_CARD."
+              }
+            }
+          },
+          "tip": {
+            "type": "number",
+            "description": "Optional tip amount in USD."
+          },
+          "store_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "order_id",
+          "status",
+          "amount_charged"
+        ],
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "COMPLETED | DECLINED | PENDING"
+          },
+          "amount_charged": {
+            "type": "number"
+          },
+          "charged_last4": {
+            "type": "string"
+          },
+          "receipt_url": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "order_id": "ORD-20251001-4832",
+        "status": "COMPLETED",
+        "amount_charged": 10.53,
+        "charged_last4": "4242",
+        "receipt_url": "https://shop.example/receipts/ORD-20251001-4832",
+        "message": "Payment accepted. Order number 4832. Please await pickup at register 2."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "guest_order_single_scoop",
+      "name": "Guest orders single-scoop Vanilla in cone with fudge",
+      "text": "DateTime: 2025-10-01T11:05:00-07:00. Store: STORE-07 (zip 94107). Customer: Guest (no authentication). Cart: CART-G-1001. Action flow: check_flavor_availability for SKU 1001 (Vanilla) at STORE-07; expected available_scoops 40, price_per_scoop $3.00. Then add_to_cart line item LN-01: flavors ['1001'], scoop_count 1, vessel CONE, fudge true, sprinkles false. Resulting cart subtotal $3.00. Customer chooses checkout with payment_method CASH, tip $0. Customer expects order_id ORD-20251001-G001, status COMPLETED, amount_charged 3.00, message: 'Order ready at Register 1.'"
+    },
+    {
+      "id": "returning_customer_multi_scoop_with_sprinkles",
+      "name": "Authenticated returning customer orders two-scoop cup with sprinkles",
+      "text": "DateTime: 2025-10-01T12:32:20-07:00. Store: STORE-03 (zip 07030). Customer attempts authenticate_customer with customer_id '042' and card_last4 '4242'. Expected authentication success, display_name 'Avery', loyalty_tier 'GOLD'. Customer session cart CART-042-0002. Flow: check_flavor_availability for SKU 1005 (Cookies & Cream) at STORE-03 -> available_scoops 24, price_per_scoop $2.50; check_flavor_availability for SKU 1002 (Chocolate) -> available_scoops 15, price_per_scoop $2.75. Add to cart LN-10: flavors ['1005','1002'], scoop_count 2, vessel CUP, sprinkles true, fudge false. Line price should calculate to $6.75 (2.50 + 2.75 with cup base applied). Cart subtotal $6.75, tax $0.54, total $7.29. Checkout uses CARD_ON_FILE with card_last4 '4242', tip $1.00. Expected checkout response: order_id ORD-20251001-042A, status COMPLETED, amount_charged 8.29, charged_last4 '4242', receipt_url provided."
+    },
+    {
+      "id": "flavor_out_of_stock_and_swap",
+      "name": "Customer requests three scoops including an out-of-stock flavor and accepts a swap",
+      "text": "DateTime: 2025-10-01T14:50:00-07:00. Store: STORE-12 (zip 80202). Customer: walk-up guest, cart CART-TS-300. Desired configuration: 3 scoops, flavors ['1011','1004','1009'] -> Brownie Batter (1011), Mint Chip (1004), Coffee (1009). check_flavor_availability responses: SKU 1011 Brownie Batter -> LOW_STOCK available_scoops 2; SKU 1004 Mint Chip -> OUT_OF_STOCK available_scoops 0; SKU 1009 Coffee -> IN_STOCK available_scoops 10. Kiosk must notify customer Mint Chip is OUT_OF_STOCK and suggest swap to SKU 1002 Chocolate or SKU 1005 Cookies & Cream. Customer accepts swap to SKU 1002. add_to_cart LN-77: flavors ['1011','1002','1009'], scoop_count 3, vessel CONE, sprinkles false, fudge true. Line price compute example: scoop prices 3.25 (1011), 2.75 (1002), 2.50 (1009) = 8.50 + fudge $0.75 = 9.25. Cart subtotal $9.25. Customer pays with NEW_CARD (card_last4 '1111', auth_token 'tok_abc123'). Expected checkout: order_id ORD-20251001-300X, status COMPLETED, amount_charged 9.25, charged_last4 '1111'."
+    }
+  ],
+  "defaultScenarioId": "returning_customer_multi_scoop_with_sprinkles"
+}

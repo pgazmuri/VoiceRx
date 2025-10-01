@@ -10,6 +10,11 @@ export async function POST(req: NextRequest) {
     if (!description) return new Response(JSON.stringify({ error:'missing_description'}), { status:400 });
     const key = await readKey();
   const example = getActiveConfig();
+  // limit tools defined to first 3 tools to reduce token use
+  example.tools = example.tools.slice(0,3);
+  const path = require('path');
+  const GENERATED_DIR = path.join(process.cwd(), 'generated_configs');
+
   // Provide only ONE scenario as the pattern example to reduce token use and avoid overfitting domain specifics
   const singleScenarioExample = { ...example, scenarios: example.scenarios.slice(0,1), defaultScenarioId: example.scenarios[0]?.id };
   const exampleJson = JSON.stringify(singleScenarioExample);
@@ -29,7 +34,7 @@ Constraints:
 - defaultScenarioId must match one of scenarios.
 Return ONLY JSON. No markdown.`;
   const user = `New domain description: ${description}\nReference CONFIG PATTERN (single-scenario sample) below. Synthesize 2-4 NEW scenarios (do NOT reuse the example).\nExample JSON:\n${exampleJson}\nReturn ONLY the new full config JSON.`;
-    const requestPayload = { model:'gpt-5', reasoning:{ effort:'low' }, input:[{ role:'system', content: system }, { role:'user', content: user }] };
+    const requestPayload = { model:'gpt-5-mini', reasoning:{ effort:'low' }, input:[{ role:'system', content: system }, { role:'user', content: user }] };
     console.log('[config.generate] Sending generation request', { description, forcedId: !!forcedId, forcedName: !!forcedName });
     const resp = await fetch('https://api.openai.com/v1/responses', { method:'POST', headers:{ 'Authorization':`Bearer ${key}`, 'Content-Type':'application/json' }, body: JSON.stringify(requestPayload) });
     const json = await resp.json();
