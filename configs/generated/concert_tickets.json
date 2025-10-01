@@ -1,0 +1,793 @@
+{
+  "id": "concert_tickets",
+  "name": "Concert Ticket Sales Agent",
+  "description": "Domain for discovering live events, checking real-time seat availability, quoting all-in pricing, placing short holds, and completing secure ticket purchases (plus common add-ons).",
+  "prompt": "You are a concert and live events ticketing assistant.\n- Do not assume availability or prices; rely on tool outputs.\n- Ask brief clarifying questions when needed (date, city/venue, number of tickets, budget, seating preferences, accessibility, delivery method).\n- Always present all-in pricing before purchase: face value, fees, add-ons, discounts, and total. Note hold expiration times.\n- Do not collect or store full payment details; only accept redacted payment descriptors (e.g., last4). Never invent barcodes or ticket claims.\n- Flag restrictions (obstructed view, age limits, no-refund policies) and accessibility considerations explicitly.\n- Use tools only when they add value and keep responses concise and actionable.\n- If unable to complete a request or if the user insists, escalate with [ESCALATE TO HUMAN].\nDefault to English unless the user requests another language.",
+  "tools": [
+    {
+      "name": "search_events",
+      "description": "Find events by performer, city, venue, or date range.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Performer or event name"
+          },
+          "city": {
+            "type": "string"
+          },
+          "venue_id": {
+            "type": "string"
+          },
+          "zip_code": {
+            "type": "string"
+          },
+          "radius_miles": {
+            "type": "number",
+            "default": 25
+          },
+          "date_from": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "event_id",
+                "name",
+                "date_time",
+                "venue",
+                "city",
+                "state",
+                "zip",
+                "status",
+                "min_price",
+                "max_price"
+              ],
+              "properties": {
+                "event_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "date_time": {
+                  "type": "string"
+                },
+                "venue": {
+                  "type": "string"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "zip": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "ON_SALE | LIMITED | SOLD_OUT | RESCHEDULED"
+                },
+                "min_price": {
+                  "type": "number"
+                },
+                "max_price": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "events": [
+          {
+            "event_id": "EVT-TS-20250815-NJ",
+            "name": "Taylor Swift | The Eras Tour",
+            "date_time": "2025-08-15T19:30:00-04:00",
+            "venue": "MetLife Stadium",
+            "city": "East Rutherford",
+            "state": "NJ",
+            "zip": "07073",
+            "status": "LIMITED",
+            "min_price": 199,
+            "max_price": 899
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_seat_map",
+      "description": "Retrieve seat zones, rows, and seat identifiers for an event.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "zones"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "section",
+                "rows",
+                "price_level",
+                "base_price"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                },
+                "price_level": {
+                  "type": "string"
+                },
+                "base_price": {
+                  "type": "number"
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "row",
+                      "seat_ids"
+                    ],
+                    "properties": {
+                      "row": {
+                        "type": "string"
+                      },
+                      "seat_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "attributes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "event_id": "EVT-NBA-LAL-GSW-20251203",
+        "zones": [
+          {
+            "section": "207",
+            "price_level": "UPPER",
+            "base_price": 95,
+            "rows": [
+              {
+                "row": "5",
+                "seat_ids": [
+                  "207-5-1",
+                  "207-5-2",
+                  "207-5-3"
+                ],
+                "attributes": []
+              }
+            ]
+          },
+          {
+            "section": "Courtside C",
+            "price_level": "COURTSIDE",
+            "base_price": 950,
+            "rows": [
+              {
+                "row": "2",
+                "seat_ids": [
+                  "CSC-2-3",
+                  "CSC-2-4",
+                  "CSC-2-5"
+                ],
+                "attributes": [
+                  "premium"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "check_inventory",
+      "description": "Check real-time seat availability and pricing.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "section": {
+            "type": "string"
+          },
+          "row": {
+            "type": "string"
+          },
+          "price_level": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "available_seats"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "available_seats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "seat_id",
+                "price_level",
+                "base_price"
+              ],
+              "properties": {
+                "seat_id": {
+                  "type": "string"
+                },
+                "price_level": {
+                  "type": "string"
+                },
+                "base_price": {
+                  "type": "number"
+                },
+                "attributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "suggested_blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "contiguous_count",
+                "seat_ids"
+              ],
+              "properties": {
+                "contiguous_count": {
+                  "type": "integer"
+                },
+                "seat_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "event_id": "EVT-BWY-HAM-20251110",
+        "available_seats": [
+          {
+            "seat_id": "MEZ-C-105",
+            "price_level": "MEZZ_CENTER",
+            "base_price": 199
+          },
+          {
+            "seat_id": "MEZ-C-106",
+            "price_level": "MEZZ_CENTER",
+            "base_price": 199
+          },
+          {
+            "seat_id": "BAL-A-1",
+            "price_level": "BAL_LTD",
+            "base_price": 79,
+            "attributes": [
+              "obstructed_view"
+            ]
+          }
+        ],
+        "suggested_blocks": [
+          {
+            "contiguous_count": 2,
+            "seat_ids": [
+              "MEZ-C-105",
+              "MEZ-C-106"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "price_quote",
+      "description": "Get full-price quote with fees, discounts, and add-ons.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "seats",
+          "delivery_method"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "promo_code": {
+            "type": "string"
+          },
+          "customer_type": {
+            "type": "string",
+            "description": "e.g., student, military, standard"
+          },
+          "add_ons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Add-on SKUs"
+          },
+          "delivery_method": {
+            "type": "string",
+            "description": "mobile | will_call | mail"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "currency",
+          "line_items",
+          "fees",
+          "discounts",
+          "add_ons",
+          "total",
+          "delivery",
+          "expires_at"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "seat_id",
+                "face_value"
+              ],
+              "properties": {
+                "seat_id": {
+                  "type": "string"
+                },
+                "face_value": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "fees": {
+            "type": "object",
+            "properties": {
+              "service_fee_total": {
+                "type": "number"
+              },
+              "facility_fee_total": {
+                "type": "number"
+              },
+              "order_fee": {
+                "type": "number"
+              }
+            }
+          },
+          "discounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "amount"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "code": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "add_ons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sku",
+                "price"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "delivery": {
+            "type": "object",
+            "required": [
+              "method",
+              "fee"
+            ],
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "fee": {
+                "type": "number"
+              }
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "event_id": "EVT-NBA-LAL-GSW-20251203",
+        "currency": "USD",
+        "line_items": [
+          {
+            "seat_id": "207-5-1",
+            "face_value": 95
+          },
+          {
+            "seat_id": "207-5-2",
+            "face_value": 95
+          }
+        ],
+        "fees": {
+          "service_fee_total": 22.8,
+          "facility_fee_total": 4,
+          "order_fee": 1
+        },
+        "discounts": [
+          {
+            "type": "promo_percent",
+            "amount": 47.5,
+            "code": "STU25"
+          }
+        ],
+        "add_ons": [
+          {
+            "sku": "PARK-CRYPTO-20251203-LOTW",
+            "price": 35
+          }
+        ],
+        "delivery": {
+          "method": "mobile",
+          "fee": 0
+        },
+        "total": 205.3,
+        "expires_at": "2025-10-01T19:45:00Z"
+      }
+    },
+    {
+      "name": "create_hold",
+      "description": "Place a temporary hold on specific seats.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "seats",
+          "customer_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "default": 10
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "success",
+          "hold_id",
+          "event_id",
+          "seats",
+          "expires_at",
+          "message"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "hold_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "success": true,
+        "hold_id": "HLD-ABC123",
+        "event_id": "EVT-TS-20250815-NJ",
+        "seats": [
+          "110-14-7",
+          "110-14-8"
+        ],
+        "expires_at": "2025-08-01T15:10:00Z",
+        "message": "Seats held for 10 minutes."
+      }
+    },
+    {
+      "name": "complete_purchase",
+      "description": "Complete purchase using a hold or direct seats. Returns order and delivery details.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "customer_id",
+          "delivery_method",
+          "payment_method"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "hold_id": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "payment_method": {
+            "type": "object",
+            "required": [
+              "type",
+              "last4"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "card | apple_pay | google_pay"
+              },
+              "last4": {
+                "type": "string"
+              }
+            }
+          },
+          "delivery_method": {
+            "type": "string"
+          },
+          "add_ons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "success",
+          "order_id",
+          "event_id",
+          "tickets",
+          "delivery",
+          "total_charged"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "tickets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "seat_id",
+                "barcode_masked"
+              ],
+              "properties": {
+                "seat_id": {
+                  "type": "string"
+                },
+                "barcode_masked": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "delivery": {
+            "type": "object",
+            "required": [
+              "method",
+              "status"
+            ],
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "link": {
+                "type": "string"
+              }
+            }
+          },
+          "total_charged": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "success": true,
+        "order_id": "ORD-2025-000987",
+        "event_id": "EVT-BWY-HAM-20251110",
+        "tickets": [
+          {
+            "seat_id": "MEZ-C-105",
+            "barcode_masked": "###-1A2B-****-7Z"
+          },
+          {
+            "seat_id": "MEZ-C-106",
+            "barcode_masked": "###-3C4D-****-8Y"
+          }
+        ],
+        "delivery": {
+          "method": "mobile",
+          "status": "DELIVERED",
+          "link": "https://tix.example.com/tickets/ORD-2025-000987"
+        },
+        "total_charged": 456,
+        "currency": "USD",
+        "message": "Purchase complete. Check your email for confirmation."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "swift_metlife_2025",
+      "name": "Taylor Swift at MetLife (NJ)",
+      "text": "Customer: Maria Lopez (customer_id CUST1001) email maria.lopez@example.com ZIP 07073. Preferred delivery: mobile. Payment descriptor: card last4 4242.\nEvent: EVT-TS-20250815-NJ \"Taylor Swift | The Eras Tour\" MetLife Stadium East Rutherford, NJ 07073 DateTime 2025-08-15T19:30:00-04:00 Status LIMITED BoxOffice BOX-NJ-01.\nSeat Map:\n- Section 110 (PL1) base $399 Row 14 seats 5-12 => seat_ids 110-14-5..110-14-12\n- Floor A (PL2) base $799 Row 6 seats 1-20 => seat_ids FL-A-6-1..FL-A-6-20\nFees: service 12% of face; facility $5 per ticket; order fee $3 per order. Delivery fee: mobile $0, mail $12.\nPromo: SWIFT10 = 10% off face (limit 2 tickets per order).\nInventory: All listed seats available except 110-14-7 & 110-14-8 currently on hold HLD-TS-001 for CUST1001 until 2025-08-01T15:10:00Z. Suggested contiguous blocks in 110 row 14: [110-14-5,110-14-6] and [110-14-9,110-14-10,110-14-11,110-14-12]. Holds default expiry 10 minutes."
+    },
+    {
+      "id": "lakers_warriors_2025",
+      "name": "NBA: Lakers vs Warriors (LA)",
+      "text": "Customer: Daniel Kim (customer_id CUST-STU-009) email daniel.kim@ucla.edu Type student ZIP 90015. Delivery: mobile only.\nEvent: EVT-NBA-LAL-GSW-20251203 \"Los Angeles Lakers vs Golden State Warriors\" Crypto.com Arena Los Angeles, CA 90015 DateTime 2025-12-03T19:30:00-08:00 Status ON_SALE.\nSeat Map:\n- Section 207 (UPPER) base $95 Row 5 seats 1-20 => seat_ids 207-5-1..207-5-20\n- Section 115 (LOWER) base $210 Row 8 seats 1-16 => seat_ids 115-8-1..115-8-16\n- Courtside C (COURTSIDE) base $950 Row 2 seats 3-8 => seat_ids CSC-2-3..CSC-2-8\nFees: service 12% of face; facility $2 per ticket; order fee $1. Delivery fee $0 (mobile only).\nPromo: STU25 = 25% off face for sections 200-219; requires customer_type=student; max 4 tickets per order; not valid on courtside. Add-on: Parking SKU PARK-CRYPTO-20251203-LOTW $35.\nInventory: UPPER 207 row 5 seats all available contiguous; LOWER 115 row 8 seats 1-6 available; courtside seats 3-5 available. Holds expire in 10 minutes."
+    },
+    {
+      "id": "hamilton_broadway_2025",
+      "name": "Broadway: Hamilton (NYC)",
+      "text": "Customer: Evelyn Chen (customer_id CUST777) email evelyn.chen@example.com ZIP 10036. Needs accessible seating.\nEvent: EVT-BWY-HAM-20251110 \"Hamilton\" Richard Rodgers Theatre New York, NY 10036 DateTime 2025-11-10T20:00:00-05:00 Status ON_SALE.\nSeat Map:\n- Orchestra Left (ORCH_LEFT) base $279 Row F seats 101-113 => seat_ids ORL-F-101..ORL-F-113\n- Mezzanine Center (MEZZ_CENTER) base $199 Row C seats 101-121 => seat_ids MEZ-C-101..MEZ-C-121\n- Balcony Limited (BAL_LTD) base $79 Row A seats 1-10 => seat_ids BAL-A-1..BAL-A-10 (attribute obstructed_view)\nAccessible: Orchestra Left Row A wheelchair spaces WC1..WC4 ($279) unavailable; alternative Mezz Center Row A accessible AC1..AC4 ($199) available seat_ids MEZ-A-AC1..MEZ-A-AC4 attributes [accessible].\nFees: service 10% of face; facility $2 per ticket; order fee $1. Delivery methods: mobile $0, will_call $0. No active promo codes for this performance.\nInventory: ORL-F full available; MEZ-C seats 105-110 available contiguous; BAL-A all available with obstructed_view flag; Accessible MEZ-A-AC1..AC4 available. Standard hold window 8 minutes."
+    }
+  ],
+  "defaultScenarioId": "swift_metlife_2025"
+}

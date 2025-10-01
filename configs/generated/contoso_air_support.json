@@ -1,0 +1,945 @@
+{
+  "id": "contoso_air_support",
+  "name": "Contoso Airlines Customer Support Agent",
+  "description": "Assists travelers with flight search, bookings, changes, flight status, and ancillaries for Contoso Airlines.",
+  "prompt": "You are a professional customer support agent for Contoso Airlines.\n- Be concise, friendly, and solution-focused. Confirm identity (PNR + last name or itinerary email/phone on file) before discussing booking details.\n- Quote prices, fees, and times exactly as returned by tools. Use airport codes, local time with time zone when provided, and 24-hour or AM/PM consistently per tool output.\n- Do not collect full payment card numbers or CVV; accept only masked tokens/last4 per tools. Do not promise compensation, upgrades, or policy exceptions beyond tool results. Avoid legal or regulatory advice.\n- If data is missing or conflicting, state the limitation and offer next steps. For items outside airline scope (e.g., third-party insurance), say [ESCALATE TO HUMAN]. Default to clear English.",
+  "tools": [
+    {
+      "name": "search_flights",
+      "description": "Search available Contoso Airlines flights and fares.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "origin",
+          "destination",
+          "date",
+          "adults"
+        ],
+        "properties": {
+          "origin": {
+            "type": "string",
+            "description": "IATA code, e.g., SEA"
+          },
+          "destination": {
+            "type": "string",
+            "description": "IATA code, e.g., JFK"
+          },
+          "date": {
+            "type": "string",
+            "description": "Travel date ISO YYYY-MM-DD"
+          },
+          "adults": {
+            "type": "number",
+            "minimum": 1
+          },
+          "children": {
+            "type": "number",
+            "default": 0
+          },
+          "cabin": {
+            "type": "string",
+            "enum": [
+              "ECONOMY",
+              "PREMIUM_ECONOMY",
+              "BUSINESS",
+              "FIRST"
+            ],
+            "default": "ECONOMY"
+          },
+          "nonstop_only": {
+            "type": "boolean",
+            "default": false
+          },
+          "return_date": {
+            "type": "string",
+            "description": "If round trip, ISO YYYY-MM-DD"
+          },
+          "loyalty_number": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "origin",
+          "destination",
+          "date",
+          "currency",
+          "options"
+        ],
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "flight_number",
+                "depart_time",
+                "arrive_time",
+                "duration_minutes",
+                "aircraft",
+                "stops",
+                "fare_classes"
+              ],
+              "properties": {
+                "flight_number": {
+                  "type": "string"
+                },
+                "depart_time": {
+                  "type": "string",
+                  "description": "ISO datetime with timezone"
+                },
+                "arrive_time": {
+                  "type": "string"
+                },
+                "duration_minutes": {
+                  "type": "number"
+                },
+                "aircraft": {
+                  "type": "string"
+                },
+                "stops": {
+                  "type": "number"
+                },
+                "refundable": {
+                  "type": "boolean"
+                },
+                "fare_classes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cabin",
+                      "fare_basis",
+                      "brand",
+                      "price",
+                      "seats_left"
+                    ],
+                    "properties": {
+                      "cabin": {
+                        "type": "string"
+                      },
+                      "fare_basis": {
+                        "type": "string"
+                      },
+                      "brand": {
+                        "type": "string",
+                        "description": "e.g., Basic, Standard, Flex"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "seats_left": {
+                        "type": "number"
+                      },
+                      "change_fee": {
+                        "type": "number",
+                        "description": "0 if waived"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "origin": "SEA",
+        "destination": "JFK",
+        "date": "2025-11-18",
+        "currency": "USD",
+        "options": [
+          {
+            "flight_number": "CO1234",
+            "depart_time": "2025-11-18T08:15:00-08:00",
+            "arrive_time": "2025-11-18T16:34:00-05:00",
+            "duration_minutes": 319,
+            "aircraft": "A321neo",
+            "stops": 0,
+            "refundable": false,
+            "fare_classes": [
+              {
+                "cabin": "ECONOMY",
+                "fare_basis": "YNBR",
+                "brand": "Standard",
+                "price": 249.2,
+                "seats_left": 6,
+                "change_fee": 0
+              },
+              {
+                "cabin": "PREMIUM_ECONOMY",
+                "fare_basis": "WFLX",
+                "brand": "Flex",
+                "price": 389,
+                "seats_left": 3,
+                "change_fee": 0
+              }
+            ]
+          },
+          {
+            "flight_number": "CO1450",
+            "depart_time": "2025-11-18T12:55:00-08:00",
+            "arrive_time": "2025-11-18T21:10:00-05:00",
+            "duration_minutes": 315,
+            "aircraft": "B737 MAX 8",
+            "stops": 0,
+            "refundable": true,
+            "fare_classes": [
+              {
+                "cabin": "ECONOMY",
+                "fare_basis": "YREF",
+                "brand": "Flex",
+                "price": 312,
+                "seats_left": 2,
+                "change_fee": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_booking",
+      "description": "Create a booking and issue tickets for selected flights.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "itinerary",
+          "passengers",
+          "contact",
+          "payment"
+        ],
+        "properties": {
+          "itinerary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "flight_number",
+                "date",
+                "fare_basis"
+              ],
+              "properties": {
+                "flight_number": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD"
+                },
+                "fare_basis": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "passengers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "first_name",
+                "last_name",
+                "dob"
+              ],
+              "properties": {
+                "first_name": {
+                  "type": "string"
+                },
+                "last_name": {
+                  "type": "string"
+                },
+                "dob": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD"
+                },
+                "gender": {
+                  "type": "string"
+                },
+                "loyalty_number": {
+                  "type": "string"
+                },
+                "passport": {
+                  "type": "object",
+                  "properties": {
+                    "number": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "expiry": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "contact": {
+            "type": "object",
+            "required": [
+              "email",
+              "phone"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          },
+          "payment": {
+            "type": "object",
+            "required": [
+              "method",
+              "amount",
+              "currency"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "CARD_TOKEN",
+                  "VOUCHER",
+                  "MILES"
+                ]
+              },
+              "token_last4": {
+                "type": "string",
+                "description": "Masked payment reference"
+              },
+              "voucher_code": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "pnr",
+          "total_charged",
+          "currency",
+          "tickets",
+          "itinerary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "pnr": {
+            "type": "string"
+          },
+          "total_charged": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "tickets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "passenger_name",
+                "ticket_numbers"
+              ],
+              "properties": {
+                "passenger_name": {
+                  "type": "string"
+                },
+                "ticket_numbers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "itinerary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "segment_id",
+                "flight_number",
+                "date",
+                "depart_time",
+                "arrive_time",
+                "origin",
+                "destination",
+                "fare_basis"
+              ],
+              "properties": {
+                "segment_id": {
+                  "type": "string"
+                },
+                "flight_number": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "depart_time": {
+                  "type": "string"
+                },
+                "arrive_time": {
+                  "type": "string"
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "destination": {
+                  "type": "string"
+                },
+                "fare_basis": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "fare_rules_summary": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "status": "CONFIRMED",
+        "pnr": "H7Q4ZT",
+        "total_charged": 498.4,
+        "currency": "USD",
+        "tickets": [
+          {
+            "passenger_name": "Alex Morgan",
+            "ticket_numbers": [
+              "035-5512345678"
+            ]
+          },
+          {
+            "passenger_name": "Jamie Morgan",
+            "ticket_numbers": [
+              "035-5512345679"
+            ]
+          }
+        ],
+        "itinerary": [
+          {
+            "segment_id": "SEG1",
+            "flight_number": "CO1234",
+            "date": "2025-11-18",
+            "depart_time": "2025-11-18T08:15:00-08:00",
+            "arrive_time": "2025-11-18T16:34:00-05:00",
+            "origin": "SEA",
+            "destination": "JFK",
+            "fare_basis": "YNBR"
+          }
+        ],
+        "fare_rules_summary": "Nonrefundable; no change fee; fare difference applies; same-day standby permitted."
+      }
+    },
+    {
+      "name": "get_booking",
+      "description": "Retrieve booking details by PNR and last name.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "status",
+          "passengers",
+          "itinerary",
+          "balance_due",
+          "currency"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "e.g., CONFIRMED, TICKETED, CANCELLED"
+          },
+          "passengers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "first_name",
+                "last_name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "first_name": {
+                  "type": "string"
+                },
+                "last_name": {
+                  "type": "string"
+                },
+                "loyalty_number": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "itinerary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "segment_id",
+                "flight_number",
+                "date",
+                "origin",
+                "destination",
+                "depart_time",
+                "arrive_time",
+                "cabin"
+              ],
+              "properties": {
+                "segment_id": {
+                  "type": "string"
+                },
+                "flight_number": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "destination": {
+                  "type": "string"
+                },
+                "depart_time": {
+                  "type": "string"
+                },
+                "arrive_time": {
+                  "type": "string"
+                },
+                "cabin": {
+                  "type": "string"
+                },
+                "ticket_number": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "balance_due": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "contact": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "pnr": "Q2BR7A",
+        "status": "TICKETED",
+        "passengers": [
+          {
+            "id": "P1",
+            "first_name": "Riya",
+            "last_name": "Patel",
+            "loyalty_number": "CA12345678"
+          },
+          {
+            "id": "P2",
+            "first_name": "Anil",
+            "last_name": "Patel"
+          }
+        ],
+        "itinerary": [
+          {
+            "segment_id": "SEG1",
+            "flight_number": "CO221",
+            "date": "2025-10-12",
+            "origin": "SFO",
+            "destination": "SEA",
+            "depart_time": "2025-10-12T09:40:00-07:00",
+            "arrive_time": "2025-10-12T11:35:00-07:00",
+            "cabin": "ECONOMY",
+            "ticket_number": "035-5511111111"
+          }
+        ],
+        "balance_due": 0,
+        "currency": "USD",
+        "contact": {
+          "email": "riya.patel@example.com",
+          "phone": "+1-415-555-0199"
+        }
+      }
+    },
+    {
+      "name": "change_flight",
+      "description": "Modify a booked flight segment to a different Contoso flight on a specified date.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name",
+          "segment_id",
+          "new_flight_number",
+          "new_date",
+          "accept_price_change"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "segment_id": {
+            "type": "string"
+          },
+          "new_flight_number": {
+            "type": "string"
+          },
+          "new_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "accept_price_change": {
+            "type": "boolean"
+          },
+          "waive_fee_reason": {
+            "type": "string",
+            "description": "e.g., ELITE, SCHEDULE_CHANGE"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "pnr",
+          "segment_id",
+          "old_flight",
+          "new_flight",
+          "fare_difference",
+          "change_fee",
+          "currency"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "e.g., CHANGED, FAILED"
+          },
+          "pnr": {
+            "type": "string"
+          },
+          "segment_id": {
+            "type": "string"
+          },
+          "old_flight": {
+            "type": "string"
+          },
+          "new_flight": {
+            "type": "string"
+          },
+          "new_depart_time": {
+            "type": "string"
+          },
+          "new_arrive_time": {
+            "type": "string"
+          },
+          "fare_difference": {
+            "type": "number"
+          },
+          "change_fee": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "new_ticket_number": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "status": "CHANGED",
+        "pnr": "M9L2CX",
+        "segment_id": "SEG1",
+        "old_flight": "CO210 LAX-ORD 2025-10-03",
+        "new_flight": "CO278 LAX-ORD 2025-10-03",
+        "new_depart_time": "2025-10-03T13:10:00-07:00",
+        "new_arrive_time": "2025-10-03T19:21:00-05:00",
+        "fare_difference": 42,
+        "change_fee": 0,
+        "currency": "USD",
+        "new_ticket_number": "035-5598765432",
+        "notes": "Change fee waived due to Gold status."
+      }
+    },
+    {
+      "name": "check_flight_status",
+      "description": "Get real-time status for a specific flight and date.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "flight_number",
+          "date"
+        ],
+        "properties": {
+          "flight_number": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "departure_airport": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "flight_number",
+          "date",
+          "status",
+          "origin",
+          "destination",
+          "scheduled_departure",
+          "scheduled_arrival"
+        ],
+        "properties": {
+          "flight_number": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "e.g., ON TIME, DELAYED, CANCELED, IN AIR, LANDED"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "scheduled_departure": {
+            "type": "string"
+          },
+          "scheduled_arrival": {
+            "type": "string"
+          },
+          "estimated_departure": {
+            "type": "string"
+          },
+          "estimated_arrival": {
+            "type": "string"
+          },
+          "gate": {
+            "type": "string"
+          },
+          "terminal": {
+            "type": "string"
+          },
+          "remarks": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "flight_number": "CO221",
+        "date": "2025-10-12",
+        "status": "ON TIME",
+        "origin": "SFO",
+        "destination": "SEA",
+        "scheduled_departure": "2025-10-12T09:40:00-07:00",
+        "scheduled_arrival": "2025-10-12T11:35:00-07:00",
+        "estimated_departure": "2025-10-12T09:40:00-07:00",
+        "estimated_arrival": "2025-10-12T11:35:00-07:00",
+        "terminal": "1",
+        "gate": "B12",
+        "remarks": "Boarding starts 09:05"
+      }
+    },
+    {
+      "name": "add_baggage",
+      "description": "Prepay checked baggage for a passenger on a booking.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "pnr",
+          "last_name",
+          "passenger_id",
+          "bags"
+        ],
+        "properties": {
+          "pnr": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "passenger_id": {
+            "type": "string"
+          },
+          "bags": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Number of additional checked bags"
+          },
+          "payment": {
+            "type": "object",
+            "required": [
+              "method",
+              "amount",
+              "currency"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "CARD_TOKEN",
+                  "VOUCHER",
+                  "MILES"
+                ]
+              },
+              "token_last4": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "pnr",
+          "passenger_id",
+          "bags_added",
+          "total_fee",
+          "currency",
+          "emd_number"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "pnr": {
+            "type": "string"
+          },
+          "passenger_id": {
+            "type": "string"
+          },
+          "bags_added": {
+            "type": "number"
+          },
+          "total_fee": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "emd_number": {
+            "type": "string"
+          },
+          "allowance_note": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "status": "ADDED",
+        "pnr": "Q2BR7A",
+        "passenger_id": "P1",
+        "bags_added": 1,
+        "total_fee": 35,
+        "currency": "USD",
+        "emd_number": "035-8800123456",
+        "allowance_note": "1st checked bag prepaid; 50 lb (23 kg) max."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "sea_jfk_new_booking",
+      "name": "New Booking: SEA to JFK Nonstop for 2",
+      "text": "Customer wants to book SEA→JFK on 2025-11-18 for 2 adults in Economy, nonstop only.\nTool expectations:\n- search_flights args: {origin:\"SEA\", destination:\"JFK\", date:\"2025-11-18\", adults:2, cabin:\"ECONOMY\", nonstop_only:true}. Return includes CO1234 08:15-16:34 (A321neo, 0 stops) with ECONOMY YNBR price 249.2 each.\n- create_booking args: {itinerary:[{flight_number:\"CO1234\", date:\"2025-11-18\", fare_basis:\"YNBR\"}], passengers:[{first_name:\"Alex\", last_name:\"Morgan\", dob:\"1990-03-12\"},{first_name:\"Jamie\", last_name:\"Morgan\", dob:\"1992-07-08\"}], contact:{email:\"alex.morgan@example.com\", phone:\"+1-206-555-0132\"}, payment:{method:\"CARD_TOKEN\", token_last4:\"4242\", amount:498.4, currency:\"USD\"}}. Result: status CONFIRMED, pnr H7Q4ZT, tickets 035-5512345678/679, itinerary segment SEG1 matching CO1234 with times 2025-11-18T08:15:00-08:00 → 2025-11-18T16:34:00-05:00, total_charged 498.4 USD."
+    },
+    {
+      "id": "lax_ord_change_same_day",
+      "name": "Change Ticket: Later LAX→ORD Same Day",
+      "text": "Customer (last name Nguyen) wants to move first segment to a later flight. Existing PNR M9L2CX: LAX→ORD (SEG1) on 2025-10-03 at 09:05 (CO210), then ORD→BOS (SEG2) 2025-10-03 21:05 (CO834). Gold member; change fee waived.\nTool expectations:\n- get_booking args: {pnr:\"M9L2CX\", last_name:\"Nguyen\"}. Return itinerary includes SEG1 CO210 LAX-ORD 2025-10-03T09:05:00-07:00 → 2025-10-03T15:15:00-05:00, SEG2 CO834 ORD-BOS 2025-10-03T21:05:00-05:00 → 2025-10-04T00:24:00-04:00.\n- change_flight args: {pnr:\"M9L2CX\", last_name:\"Nguyen\", segment_id:\"SEG1\", new_flight_number:\"CO278\", new_date:\"2025-10-03\", accept_price_change:true, waive_fee_reason:\"ELITE\"}. Result: status CHANGED; new flight CO278 departs 13:10 PDT, arrives 19:21 CDT; fare_difference 42.00 USD; change_fee 0.00; new_ticket_number 035-5598765432."
+    },
+    {
+      "id": "status_and_bags_sfo_sea",
+      "name": "Flight Status + Confirm Booking + Add Bag",
+      "text": "Customer Patel asks: check status of CO221 SFO→SEA on 2025-10-12, confirm their booking, and add 1 checked bag for passenger P1.\nTool expectations:\n- check_flight_status args: {flight_number:\"CO221\", date:\"2025-10-12\", departure_airport:\"SFO\"}. Return: ON TIME; terminal 1, gate B12; sched 09:40-11:35 PDT.\n- get_booking args: {pnr:\"Q2BR7A\", last_name:\"Patel\"}. Return: status TICKETED; passengers P1 Riya Patel (loyalty CA12345678) and P2 Anil Patel; itinerary SEG1 CO221 SFO-SEA 2025-10-12T09:40:00-07:00 → 11:35:00-07:00; balance_due 0 USD; contact riya.patel@example.com.\n- add_baggage args: {pnr:\"Q2BR7A\", last_name:\"Patel\", passenger_id:\"P1\", bags:1, payment:{method:\"CARD_TOKEN\", token_last4:\"1337\", amount:35.0, currency:\"USD\"}}. Result: status ADDED; emd 035-8800123456; total_fee 35.00 USD; allowance note 1st checked bag prepaid."
+    }
+  ],
+  "defaultScenarioId": "sea_jfk_new_booking"
+}

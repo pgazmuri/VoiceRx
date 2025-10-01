@@ -1,0 +1,809 @@
+{
+  "id": "clinical_voice_nurse",
+  "name": "Clinical Nurse Voice Assistant",
+  "description": "Voice assistant for bedside and unit nurses: retrieve and chart vitals, summarize and answer questions about EHR records, and locate clinical assets.",
+  "prompt": "You are a voice assistant for nurses in a clinical setting.\n- Keep answers brief, clinical, and actionable. Confirm patient with two identifiers (e.g., name + MRN or DOB) before discussing chart data. Use the minimum necessary information.\n- Cite facts from tools explicitly (e.g., \"Vitals at 08:12: BP 158/94 from monitor MX700\"). If uncertain or data missing, say so and propose next steps.\n- Safety: Do not diagnose, prescribe, or override clinical judgment. Do not provide medication dosing or invasive procedure guidance. For emergencies, prompt: \"Activate emergency response and follow unit protocol.\"\n- Privacy: Do not expose PHI beyond the immediate task. Avoid free-form PII collection. Use room/unit identifiers rather than full addresses.\n- Avoid external web lookups. If tool limits prevent completion or user insists beyond scope, say [ESCALATE TO HUMAN].\n- Default to clear, professional English; read back entries before confirming charting.",
+  "tools": [
+    {
+      "name": "get_patient_vitals",
+      "description": "Retrieve patient vital signs over a timeframe.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "patient_id"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO datetime inclusive"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO datetime inclusive"
+          },
+          "last_n_hours": {
+            "type": "number",
+            "description": "If set, overrides from/to"
+          },
+          "include_notes": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "entries"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "taken_at",
+                "source",
+                "measurements"
+              ],
+              "properties": {
+                "taken_at": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "e.g., Monitor, Manual"
+                },
+                "device_id": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "string",
+                  "description": "e.g., Sitting, Supine"
+                },
+                "measurements": {
+                  "type": "object",
+                  "properties": {
+                    "hr_bpm": {
+                      "type": "number"
+                    },
+                    "bp_systolic": {
+                      "type": "number"
+                    },
+                    "bp_diastolic": {
+                      "type": "number"
+                    },
+                    "rr_per_min": {
+                      "type": "number"
+                    },
+                    "temp_c": {
+                      "type": "number"
+                    },
+                    "spo2_pct": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "mews_score": {
+                  "type": "number"
+                },
+                "notes": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "patient_id": "MRN-449201",
+        "entries": [
+          {
+            "taken_at": "2025-09-24T08:12:00Z",
+            "source": "Monitor",
+            "device_id": "MX700-04E",
+            "position": "Supine",
+            "measurements": {
+              "hr_bpm": 104,
+              "bp_systolic": 158,
+              "bp_diastolic": 94,
+              "rr_per_min": 22,
+              "temp_c": 37.6,
+              "spo2_pct": 93
+            },
+            "mews_score": 4,
+            "notes": "Post-op PACU transfer; patient drowsy"
+          },
+          {
+            "taken_at": "2025-09-24T06:05:00Z",
+            "source": "Manual",
+            "device_id": "NURSE-ENTRY",
+            "position": "Semi-Fowlers",
+            "measurements": {
+              "hr_bpm": 96,
+              "bp_systolic": 146,
+              "bp_diastolic": 88,
+              "rr_per_min": 20,
+              "temp_c": 37.4,
+              "spo2_pct": 95
+            },
+            "mews_score": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "record_vitals",
+      "description": "Chart a new set of vital signs for a patient.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "measurements",
+          "taken_at",
+          "source"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "measurements": {
+            "type": "object",
+            "properties": {
+              "hr_bpm": {
+                "type": "number"
+              },
+              "bp_systolic": {
+                "type": "number"
+              },
+              "bp_diastolic": {
+                "type": "number"
+              },
+              "rr_per_min": {
+                "type": "number"
+              },
+              "temp_c": {
+                "type": "number"
+              },
+              "spo2_pct": {
+                "type": "number"
+              }
+            }
+          },
+          "taken_at": {
+            "type": "string",
+            "description": "ISO datetime"
+          },
+          "source": {
+            "type": "string",
+            "description": "Manual or Monitor"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "patient_id",
+          "recorded_at",
+          "measurements"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "patient_id": {
+            "type": "string"
+          },
+          "encounter_id": {
+            "type": "string"
+          },
+          "recorded_at": {
+            "type": "string"
+          },
+          "measurements": {
+            "type": "object",
+            "properties": {
+              "hr_bpm": {
+                "type": "number"
+              },
+              "bp_systolic": {
+                "type": "number"
+              },
+              "bp_diastolic": {
+                "type": "number"
+              },
+              "rr_per_min": {
+                "type": "number"
+              },
+              "temp_c": {
+                "type": "number"
+              },
+              "spo2_pct": {
+                "type": "number"
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "status": "SAVED",
+        "patient_id": "MRN-449201",
+        "encounter_id": "ENC-2025-09-24-4E-412B",
+        "recorded_at": "2025-09-24T08:20:11Z",
+        "measurements": {
+          "hr_bpm": 98,
+          "bp_systolic": 150,
+          "bp_diastolic": 92,
+          "rr_per_min": 21,
+          "temp_c": 37.5,
+          "spo2_pct": 94
+        },
+        "warnings": [
+          "BP above unit threshold; notify if persistent per protocol."
+        ]
+      }
+    },
+    {
+      "name": "summarize_ehr_record",
+      "description": "Summarize key elements of a patient's EHR.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "patient_id"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Problems",
+                "Allergies",
+                "Medications",
+                "Labs",
+                "Imaging",
+                "Procedures",
+                "Vitals",
+                "Notes",
+                "CarePlan"
+              ]
+            }
+          },
+          "time_range": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "summary"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "highlights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "category",
+                "detail"
+              ],
+              "properties": {
+                "category": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "patient_id": "MRN-449201",
+        "summary": "Post-op day 0 s/p laparoscopic cholecystectomy. Hypertension, T2DM. Stable but hypertensive; mild hypoxia on 2L NC.",
+        "highlights": [
+          {
+            "category": "Problems",
+            "date": "2025-09-10",
+            "detail": "Essential hypertension; T2DM without complications."
+          },
+          {
+            "category": "Procedures",
+            "date": "2025-09-24",
+            "detail": "Laparoscopic cholecystectomy; no intra-op complications."
+          },
+          {
+            "category": "Meds",
+            "date": "2025-09-24",
+            "detail": "Home lisinopril held; sliding-scale insulin ordered."
+          },
+          {
+            "category": "Labs",
+            "date": "2025-09-24T05:40:00Z",
+            "detail": "Hgb 12.7 g/dL; WBC 9.8; Glucose 182 mg/dL."
+          }
+        ],
+        "risk_flags": [
+          "Hypertension above threshold",
+          "Fall risk post-anesthesia"
+        ]
+      }
+    },
+    {
+      "name": "answer_ehr_question",
+      "description": "Answer a focused question using the patient's chart with citations.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "question"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "CHART",
+              "LABS",
+              "MEDS",
+              "NOTES"
+            ],
+            "default": "ALL"
+          },
+          "time_range": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "answer",
+          "confidence"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "section",
+                "ref_id"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                },
+                "ref_id": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "patient_id": "MRN-552118",
+        "answer": "Allergy: Penicillin (rash). Last potassium was 4.6 mmol/L on 2025-09-22 at 07:18.",
+        "confidence": 0.94,
+        "sources": [
+          {
+            "section": "Allergies",
+            "ref_id": "ALG-77102",
+            "snippet": "Penicillin — rash; severity: mild.",
+            "date": "2023-05-03"
+          },
+          {
+            "section": "Labs",
+            "ref_id": "LAB-883920",
+            "snippet": "Potassium 4.6 mmol/L (3.5–5.1)",
+            "date": "2025-09-22T07:18:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "locate_asset",
+      "description": "Locate clinical assets (e.g., crash cart, glucometer) with last-seen telemetry.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "asset_type"
+        ],
+        "properties": {
+          "asset_type": {
+            "type": "string",
+            "description": "e.g., Crash Cart, Glucometer, Suction"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "building": {
+            "type": "string"
+          },
+          "floor": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "near_room": {
+            "type": "string"
+          },
+          "radius_m": {
+            "type": "number",
+            "default": 60
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "assets"
+        ],
+        "properties": {
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "asset_id",
+                "type",
+                "status",
+                "last_seen_time",
+                "location"
+              ],
+              "properties": {
+                "asset_id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "e.g., Ready, In Use, Low Battery"
+                },
+                "last_seen_time": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "building": {
+                      "type": "string"
+                    },
+                    "floor": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "room": {
+                      "type": "string"
+                    },
+                    "bay": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "battery_pct": {
+                  "type": "number"
+                },
+                "distance_m": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "recommendation": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "assets": [
+          {
+            "asset_id": "CC-03",
+            "type": "Crash Cart",
+            "status": "Ready",
+            "last_seen_time": "2025-09-24T08:05:00Z",
+            "location": {
+              "building": "North Tower",
+              "floor": "4",
+              "unit": "4E",
+              "room": "Hallway",
+              "bay": "Near 412"
+            },
+            "battery_pct": 88,
+            "distance_m": 18
+          }
+        ],
+        "recommendation": "Nearest crash cart is CC-03 in 4E hallway near room 412."
+      }
+    },
+    {
+      "name": "log_shift_note",
+      "description": "Create a time-stamped shift note or handoff note for a patient.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "patient_id",
+          "note_text",
+          "category"
+        ],
+        "properties": {
+          "patient_id": {
+            "type": "string"
+          },
+          "note_text": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "SHIFT_NOTE",
+              "HANDOFF",
+              "SAFETY"
+            ]
+          },
+          "tagged_users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "TEAM",
+              "UNIT",
+              "PRIVATE"
+            ],
+            "default": "TEAM"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "note_id",
+          "patient_id",
+          "created_at",
+          "preview",
+          "alerts_generated"
+        ],
+        "properties": {
+          "note_id": {
+            "type": "string"
+          },
+          "patient_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "alerts_generated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sampleResult": {
+        "note_id": "NOTE-4E-412B-20250924-0823",
+        "patient_id": "MRN-449201",
+        "created_at": "2025-09-24T08:23:44Z",
+        "preview": "Hypertensive; on 2L NC; ambulation deferred until BP reassessed.",
+        "alerts_generated": false
+      }
+    },
+    {
+      "name": "activate_emergency_code",
+      "description": "Activate an emergency code (e.g., Code Blue, Rapid Response) with location and patient context.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "code_type",
+          "location"
+        ],
+        "properties": {
+          "code_type": {
+            "type": "string",
+            "enum": [
+              "Code Blue",
+              "Rapid Response",
+              "Code Stroke",
+              "Code Sepsis",
+              "Code Respiratory"
+            ]
+          },
+          "location": {
+            "type": "object",
+            "required": [
+              "building",
+              "floor",
+              "unit",
+              "room"
+            ],
+            "properties": {
+              "building": {
+                "type": "string"
+              },
+              "floor": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "room": {
+                "type": "string"
+              },
+              "bed": {
+                "type": "string"
+              }
+            }
+          },
+          "patient_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Brief reason, e.g., unresponsive, pulseless"
+          },
+          "notify_team": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "dispatched_units",
+          "eta_seconds",
+          "announced_message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "e.g., DISPATCHED, FAILED"
+          },
+          "dispatched_units": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "eta_seconds": {
+            "type": "number"
+          },
+          "announced_message": {
+            "type": "string"
+          },
+          "ticket_id": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "status": "DISPATCHED",
+        "dispatched_units": [
+          "Code Team A",
+          "Respiratory",
+          "Security"
+        ],
+        "eta_seconds": 90,
+        "announced_message": "Code Blue, North Tower, 7W Oncology, Room 732A, Bed 1.",
+        "ticket_id": "CODE-NT-7W-732A-20250924-0912"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "postop_vitals_rounding",
+      "name": "Post-op Rounding: Retrieve and Chart Vitals",
+      "text": "Unit 4E, Room 412B. Patient: \"J. Martinez\" MRN-449201 (verify name + MRN). Nurse asks: \"Give me the last 4 hours of vitals and flag anything outside thresholds. Then chart a new set.\" Tool expectations:\n- get_patient_vitals args: {patient_id:\"MRN-449201\", last_n_hours:4, include_notes:true}. Return includes two entries: 2025-09-24T08:12Z Monitor MX700-04E with BP 158/94, HR 104, RR 22, Temp 37.6C, SpO2 93%, MEWS 4; 2025-09-24T06:05Z Manual with BP 146/88, HR 96, RR 20, Temp 37.4C, SpO2 95%.\n- record_vitals args: {patient_id:\"MRN-449201\", taken_at:\"2025-09-24T08:20:00Z\", source:\"Manual\", device_id:\"NURSE-ENTRY\", position:\"Supine\", measurements:{hr_bpm:98, bp_systolic:150, bp_diastolic:92, rr_per_min:21, temp_c:37.5, spo2_pct:94}, notes:\"Post-op day 0\"}. Result: status SAVED, encounter ENC-2025-09-24-4E-412B, warning about elevated BP.\n- summarize_ehr_record args: {patient_id:\"MRN-449201\", sections:[\"Problems\",\"Procedures\",\"Meds\",\"Labs\"]}. Summary should mention lap chole 2025-09-24, HTN, T2DM, glucose 182 mg/dL."
+    },
+    {
+      "id": "asset_tracking_code_readiness",
+      "name": "Locate Crash Cart and Glucometer",
+      "text": "Charge nurse on 4E asks: \"Where’s the crash cart and a working glucometer near room 412?\" Tool expectations:\n- locate_asset for crash cart args: {asset_type:\"Crash Cart\", floor:\"4\", unit:\"4E\", near_room:\"412\", radius_m:60}. Return: asset CC-03, status Ready, last_seen 2025-09-24T08:05Z, location North Tower/4/4E/Hallway bay Near 412, distance 18m.\n- locate_asset for glucometer args: {asset_type:\"Glucometer\", floor:\"4\", unit:\"4E\", near_room:\"412\", radius_m:60}. Return top two assets: GLU-4E-07 (Ready, last_seen 2025-09-24T08:14Z, room 410, battery 72%, distance 12m) and GLU-4E-02 (Low Battery, last_seen 2025-09-24T07:50Z, room 418, battery 14%, distance 26m). Recommendation should suggest GLU-4E-07."
+    },
+    {
+      "id": "allergies_and_labs_check",
+      "name": "Allergies and Recent Lab Values",
+      "text": "Patient: \"R. Jenkins\" MRN-552118 (verify with DOB if available). Nurse asks: \"Does he have any allergies and when was his last potassium?\" Tool expectations:\n- answer_ehr_question args: {patient_id:\"MRN-552118\", question:\"List allergies and last potassium value/time\", scope:\"ALL\"}. Return: Allergy Penicillin (rash), source Allergies ALG-77102; last potassium 4.6 mmol/L at 2025-09-22T07:18Z, source Labs LAB-883920.\n- summarize_ehr_record args: {patient_id:\"MRN-552118\", sections:[\"Problems\",\"Meds\",\"Labs\"]}. Summary highlights: CHF with reduced EF, CKD stage 3a; on furosemide; creatinine 1.5 mg/dL on 2025-09-22."
+    },
+    {
+      "id": "oncology_complete_care",
+      "name": "Oncology Patient: Comprehensive Support and Emergency Readiness",
+      "text": "Unit 7W Oncology, Room 732A Bed 1, North Tower. Patient: \"L. Chen\" MRN-773845 (verify with name + MRN or DOB 1958-11-02). Dx: Diffuse large B-cell lymphoma, cycle 2 R-CHOP day 7. Neutropenic precautions.\nComplex nurse question requiring multiple tools: \"He’s febrile and borderline hypotensive post-chemo. Summarize his key problems/meds/labs/imaging and highlight risks, give me the last 6 hours of vitals and any trends, confirm allergies, when was the last ANC and lactate, and where are the nearest crash cart and a ready infusion pump near 732A? After that, chart this new set of vitals and add a safety handoff note. If he decompensates, activate a Code Blue at his location.\"\nTool expectations:\n- get_patient_vitals args: {patient_id:\"MRN-773845\", last_n_hours:6, include_notes:true}. Return entries:\n  • 2025-09-24T08:55Z Monitor MX700-7W: BP 94/58, HR 118, RR 24, Temp 38.9C, SpO2 92% RA, MEWS 6, notes:\"Neutropenic fever; notified charge RN\".\n  • 2025-09-24T07:20Z Manual: BP 102/64, HR 110, RR 22, Temp 38.4C, SpO2 94% RA, MEWS 5.\n  • 2025-09-24T05:45Z Manual: BP 108/68, HR 102, RR 20, Temp 38.0C, SpO2 95% RA, MEWS 4.\n- summarize_ehr_record args: {patient_id:\"MRN-773845\", sections:[\"Problems\",\"Allergies\",\"Medications\",\"Labs\",\"Imaging\",\"Procedures\",\"Vitals\",\"Notes\",\"CarePlan\"]}. Summary should include DLBCL on R-CHOP; neutropenia; central venous port placed 2025-08-30; chest X-ray 2025-09-23 without acute process; home HTN; prophylaxis: levofloxacin held pending cultures; care plan includes neutropenic precautions and fall risk.\n- answer_ehr_question args: {patient_id:\"MRN-773845\", question:\"List allergies, last ANC with time, last lactate with time, and presence of central line.\", scope:\"ALL\"}. Return: Allergies—Cefepime (urticaria) ALG-99231; ANC 0.3 x10^9/L at 2025-09-24T06:10Z LAB-552301; Lactate 2.6 mmol/L at 2025-09-24T08:40Z LAB-552742; Central venous port documented PRO-PORT-8831, placed 2025-08-30.\n- locate_asset (Crash Cart) args: {asset_type:\"Crash Cart\", floor:\"7\", unit:\"7W\", near_room:\"732\", radius_m:60}. Return: CC-12 Ready, last_seen 2025-09-24T08:50Z, hallway near 730, distance 14m.\n- locate_asset (Infusion Pump) args: {asset_type:\"Infusion Pump\", floor:\"7\", unit:\"7W\", near_room:\"732\", radius_m:60}. Return: IP-7W-21 Ready, last_seen 2025-09-24T08:57Z, room 734, battery 81%, distance 9m; IP-7W-04 In Use, last_seen 2025-09-24T08:30Z, room 728, distance 32m. Recommendation: IP-7W-21.\n- record_vitals args: {patient_id:\"MRN-773845\", taken_at:\"2025-09-24T09:00:00Z\", source:\"Manual\", device_id:\"NURSE-ENTRY\", position:\"Supine\", measurements:{hr_bpm:120, bp_systolic:92, bp_diastolic:56, rr_per_min:26, temp_c:39.1, spo2_pct:91}, notes:\"Neutropenic fever; borderline MAP; provider paged\"}. Result: status SAVED, encounter ENC-2025-09-24-7W-732A, warnings about hypotension and sepsis screen threshold.\n- log_shift_note args: {patient_id:\"MRN-773845\", note_text:\"Neutropenic fever with rising HR and falling BP; lactate 2.6; cultures pending; RA SpO2 91%; provider paged; sepsis huddle initiated.\", category:\"SAFETY\", tagged_users:[\"@Charge7W\"], visibility:\"UNIT\"}. Result: note created, no automated alerts blocked.\n- activate_emergency_code (if needed) args: {code_type:\"Code Blue\", location:{building:\"North Tower\", floor:\"7\", unit:\"7W\", room:\"732A\", bed:\"1\"}, patient_id:\"MRN-773845\", reason:\"Unresponsive; pulseless\", notify_team:true}. Result: DISPATCHED; Code Team A + Respiratory + Security, ETA ~90s; announcement with exact location."
+    }
+  ],
+  "defaultScenarioId": "postop_vitals_rounding"
+}

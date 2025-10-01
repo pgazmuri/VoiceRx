@@ -1,0 +1,937 @@
+{
+  "id": "icecream_shop_ordering",
+  "name": "Ice Cream Shop Ordering Agent",
+  "description": "Domain for taking ice cream orders: check flavor/topping/container availability, build and manage a shopping cart, compute pricing with taxes/discounts/loyalty, look up accounts, and securely check out using account ID and last four digits of the stored card.",
+  "prompt": "You are a concise, friendly ice cream shop ordering assistant.\n- Confirm store location, pickup time, items (SKU, flavors, container, toppings), quantities, allergens, and any promo codes before checkout.\n- Verify availability using tools; do not assume stock or prices.\n- Payment: only request/confirm account_id and last 4 digits of the stored card. Never ask for full card numbers or CVV.\n- Provide clear totals with taxes, discounts, tips, and confirm order before charging.\n- If data is missing or inconsistent, ask targeted questions. If tools fail, apologize briefly and try again or offer to escalate.\n- Avoid unrelated advice; focus on ordering and pickup details only.",
+  "tools": [
+    {
+      "name": "get_menu_availability",
+      "description": "Retrieve current menu availability, pricing, and options for a store. Can also filter by requested items.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object",
+            "properties": {
+              "flavor_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "topping_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "container_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "skus": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "tax_rate",
+          "currency",
+          "flavors",
+          "toppings",
+          "containers",
+          "skus",
+          "promo_rules"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "tax_rate": {
+            "type": "number",
+            "description": "Decimal, e.g., 0.089 for 8.9%"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "flavors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "name",
+                "is_premium",
+                "scoops_in_stock",
+                "pints_in_stock"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "is_premium": {
+                  "type": "boolean"
+                },
+                "scoops_in_stock": {
+                  "type": "number"
+                },
+                "pints_in_stock": {
+                  "type": "number"
+                },
+                "diet_tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "toppings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "name",
+                "stock_units"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "stock_units": {
+                  "type": "number"
+                },
+                "contains_allergens": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "containers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "name",
+                "surcharge",
+                "stock_units"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "surcharge": {
+                  "type": "number"
+                },
+                "stock_units": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "skus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sku",
+                "name",
+                "base_price"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "base_price": {
+                  "type": "number"
+                },
+                "includes_scoops": {
+                  "type": "number"
+                },
+                "included_toppings": {
+                  "type": "number"
+                },
+                "premium_scoop_surcharge": {
+                  "type": "number"
+                },
+                "premium_pint_surcharge": {
+                  "type": "number"
+                },
+                "extra_topping_price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "promo_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "description",
+                "type",
+                "amount",
+                "min_subtotal"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "FIXED or PERCENT"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "min_subtotal": {
+                  "type": "number"
+                },
+                "expires_on": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "store_id": "SEA-01",
+        "tax_rate": 0.089,
+        "currency": "USD",
+        "flavors": [
+          {
+            "code": "VAN",
+            "name": "Vanilla Bean",
+            "is_premium": false,
+            "scoops_in_stock": 30,
+            "pints_in_stock": 12,
+            "diet_tags": [
+              "contains_dairy"
+            ]
+          },
+          {
+            "code": "CHO",
+            "name": "Chocolate",
+            "is_premium": false,
+            "scoops_in_stock": 22,
+            "pints_in_stock": 8,
+            "diet_tags": [
+              "contains_dairy"
+            ]
+          },
+          {
+            "code": "MAT",
+            "name": "Matcha",
+            "is_premium": true,
+            "scoops_in_stock": 10,
+            "pints_in_stock": 5,
+            "diet_tags": [
+              "contains_dairy"
+            ]
+          },
+          {
+            "code": "MSB",
+            "name": "Mango Sorbet",
+            "is_premium": false,
+            "scoops_in_stock": 16,
+            "pints_in_stock": 6,
+            "diet_tags": [
+              "vegan"
+            ]
+          }
+        ],
+        "toppings": [
+          {
+            "code": "SPR",
+            "name": "Rainbow Sprinkles",
+            "stock_units": 40,
+            "contains_allergens": []
+          },
+          {
+            "code": "FUD",
+            "name": "Hot Fudge",
+            "stock_units": 25,
+            "contains_allergens": []
+          },
+          {
+            "code": "ALM",
+            "name": "Chopped Almonds",
+            "stock_units": 15,
+            "contains_allergens": [
+              "nuts"
+            ]
+          }
+        ],
+        "containers": [
+          {
+            "code": "CUP",
+            "name": "Cup",
+            "surcharge": 0,
+            "stock_units": 200
+          },
+          {
+            "code": "SCN",
+            "name": "Sugar Cone",
+            "surcharge": 0.5,
+            "stock_units": 60
+          },
+          {
+            "code": "WAF",
+            "name": "Waffle Cone",
+            "surcharge": 1,
+            "stock_units": 12
+          }
+        ],
+        "skus": [
+          {
+            "sku": "SCOOP-1",
+            "name": "Single Scoop",
+            "base_price": 4.5,
+            "includes_scoops": 1,
+            "premium_scoop_surcharge": 0.75
+          },
+          {
+            "sku": "SCOOP-2",
+            "name": "Double Scoop",
+            "base_price": 6.75,
+            "includes_scoops": 2,
+            "premium_scoop_surcharge": 0.75
+          },
+          {
+            "sku": "SUNDAE-REG",
+            "name": "Regular Sundae",
+            "base_price": 7.5,
+            "includes_scoops": 2,
+            "included_toppings": 2,
+            "extra_topping_price": 0.75,
+            "premium_scoop_surcharge": 0.75
+          },
+          {
+            "sku": "PINT",
+            "name": "Take-home Pint",
+            "base_price": 8.99,
+            "premium_pint_surcharge": 1.5
+          }
+        ],
+        "promo_rules": [
+          {
+            "code": "SWEET5",
+            "description": "$5 off orders over $20",
+            "type": "FIXED",
+            "amount": 5,
+            "min_subtotal": 20,
+            "expires_on": "2025-12-31"
+          }
+        ]
+      }
+    },
+    {
+      "name": "manage_cart",
+      "description": "Create and update a shopping cart for a specific store.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "CREATE | ADD_ITEM | UPDATE_ITEM | REMOVE_ITEM | VIEW"
+          },
+          "store_id": {
+            "type": "string",
+            "description": "Required on CREATE"
+          },
+          "cart_id": {
+            "type": "string",
+            "description": "Required for non-CREATE actions"
+          },
+          "item": {
+            "type": "object",
+            "properties": {
+              "line_id": {
+                "type": "string",
+                "description": "For UPDATE/REMOVE"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": "number"
+              },
+              "options": {
+                "type": "object",
+                "properties": {
+                  "container": {
+                    "type": "string",
+                    "description": "CUP | SCN | WAF"
+                  },
+                  "flavors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "toppings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "store_id",
+          "items",
+          "subtotal",
+          "currency"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "line_id",
+                "sku",
+                "name",
+                "quantity",
+                "unit_price",
+                "modifiers",
+                "line_subtotal"
+              ],
+              "properties": {
+                "line_id": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unit_price": {
+                  "type": "number"
+                },
+                "options": {
+                  "type": "object"
+                },
+                "modifiers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "code",
+                      "price"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "description": "CONTAINER | PREMIUM_SCOOP | EXTRA_TOPPING"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "line_subtotal": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "cart_id": "CART-SEA-000412",
+        "store_id": "SEA-01",
+        "items": [
+          {
+            "line_id": "L1",
+            "sku": "SCOOP-2",
+            "name": "Double Scoop",
+            "quantity": 1,
+            "unit_price": 6.75,
+            "options": {
+              "container": "WAF",
+              "flavors": [
+                "CHO",
+                "MAT"
+              ],
+              "toppings": []
+            },
+            "modifiers": [
+              {
+                "type": "CONTAINER",
+                "code": "WAF",
+                "price": 1
+              },
+              {
+                "type": "PREMIUM_SCOOP",
+                "code": "MAT",
+                "price": 0.75
+              }
+            ],
+            "line_subtotal": 8.5
+          },
+          {
+            "line_id": "L2",
+            "sku": "PINT",
+            "name": "Take-home Pint",
+            "quantity": 1,
+            "unit_price": 8.99,
+            "options": {
+              "flavors": [
+                "CHO"
+              ]
+            },
+            "modifiers": [],
+            "line_subtotal": 8.99
+          }
+        ],
+        "subtotal": 17.49,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "get_pricing",
+      "description": "Calculate full pricing for a cart, including discounts, taxes, loyalty redemption, and tip.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "store_id"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "promo_code": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "redeem_points": {
+            "type": "number",
+            "description": "Optional loyalty points to redeem"
+          },
+          "tip": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "store_id",
+          "currency",
+          "subtotal",
+          "discounts",
+          "taxable_subtotal",
+          "tax_rate",
+          "tax",
+          "tip",
+          "total"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "discounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "description",
+                "amount"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "PROMO | LOYALTY"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "taxable_subtotal": {
+            "type": "number"
+          },
+          "tax_rate": {
+            "type": "number"
+          },
+          "tax": {
+            "type": "number"
+          },
+          "tip": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "loyalty": {
+            "type": "object",
+            "properties": {
+              "points_redeemed": {
+                "type": "number"
+              },
+              "points_earned": {
+                "type": "number"
+              },
+              "points_balance": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "cart_id": "CART-SEA-000412",
+        "store_id": "SEA-01",
+        "currency": "USD",
+        "subtotal": 26.49,
+        "discounts": [
+          {
+            "type": "PROMO",
+            "description": "SWEET5 - $5 off orders over $20",
+            "amount": 5
+          }
+        ],
+        "taxable_subtotal": 21.49,
+        "tax_rate": 0.089,
+        "tax": 1.91,
+        "tip": 0,
+        "total": 23.4,
+        "loyalty": {
+          "points_redeemed": 0,
+          "points_earned": 23,
+          "points_balance": 97
+        }
+      }
+    },
+    {
+      "name": "lookup_account",
+      "description": "Retrieve customer account profile, stored cards (last4 only), and loyalty points.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "account_id"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "name",
+          "loyalty_points",
+          "cards"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "default_store_id": {
+            "type": "string"
+          },
+          "loyalty_points": {
+            "type": "number"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "brand",
+                "last4",
+                "exp_month",
+                "exp_year",
+                "default"
+              ],
+              "properties": {
+                "brand": {
+                  "type": "string"
+                },
+                "last4": {
+                  "type": "string"
+                },
+                "exp_month": {
+                  "type": "number"
+                },
+                "exp_year": {
+                  "type": "number"
+                },
+                "default": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "line1": {
+                  "type": "string"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "zip": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "account_id": "A100238",
+        "name": "Mia Chen",
+        "phone": "+12065550111",
+        "email": "mia.chen@example.com",
+        "default_store_id": "SEA-01",
+        "loyalty_points": 120,
+        "cards": [
+          {
+            "brand": "Visa",
+            "last4": "4242",
+            "exp_month": 7,
+            "exp_year": 2027,
+            "default": true
+          }
+        ],
+        "addresses": [
+          {
+            "label": "Home",
+            "line1": "1234 Stone Way N",
+            "city": "Seattle",
+            "state": "WA",
+            "zip": "98103"
+          }
+        ]
+      }
+    },
+    {
+      "name": "checkout_order",
+      "description": "Finalize the order: verify account and last4, authorize payment, and create an order for pickup.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cart_id",
+          "store_id",
+          "account_id",
+          "card_last4",
+          "pickup_time_iso"
+        ],
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "card_last4": {
+            "type": "string"
+          },
+          "pickup_time_iso": {
+            "type": "string"
+          },
+          "promo_code": {
+            "type": "string"
+          },
+          "redeem_points": {
+            "type": "number"
+          },
+          "tip": {
+            "type": "number",
+            "default": 0
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "order_id",
+          "status",
+          "payment_authorized",
+          "amount_charged",
+          "currency",
+          "last4",
+          "pickup_eta_iso"
+        ],
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "CREATED | CONFIRMED | FAILED"
+          },
+          "payment_authorized": {
+            "type": "boolean"
+          },
+          "amount_charged": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "pickup_eta_iso": {
+            "type": "string"
+          },
+          "receipt_url": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "order_id": "ORD-SEA-20250714-0931",
+        "status": "CONFIRMED",
+        "payment_authorized": true,
+        "amount_charged": 23.4,
+        "currency": "USD",
+        "last4": "4242",
+        "pickup_eta_iso": "2025-07-14T18:30:00-07:00",
+        "receipt_url": "https://orders.example.com/r/ORD-SEA-20250714-0931"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "sea_afterwork_combo_2025",
+      "name": "After-Work Combo with Promo (Seattle SEA-01)",
+      "text": "DateTime: 2025-07-14T18:10:00-07:00. Store: SEA-01, Address ZIP 98103, Tax 8.9%. Promo: SWEET5 ($5 off > $20) valid.\nAccount: A100238 (Mia Chen), phone +12065550111, loyalty points 120. Cards: Visa ****4242 default.\nInventory:\n- Flavors (scoops/pints, premium*): VAN 34/14, CHO 28/9, STR 18/7, MAT* 12/5, COD* 9/4, MSB 15/6.\n- Toppings (units): SPR 60, FUD 30, CAR 28, ALM 20, ORE 25.\n- Containers: CUP 300, SCN 40, WAF 8.\nSKUs and pricing: SCOOP-1 $4.50; SCOOP-2 $6.75; SUNDAE-REG $7.50 incl 2 toppings, extra topping $0.75; PINT $8.99. Premium surcharge: per scoop +$0.75; per pint +$1.50. Container surcharge: CUP $0.00, SCN $0.50, WAF $1.00.\nCart flow:\n- Create cart CART-SEA-000981.\n- Add Double Scoop (SCOOP-2), container WAF, flavors CHO + MAT (one premium). Line subtotal $8.50.\n- Add Sundae (SUNDAE-REG), flavors STR + VAN, toppings FUD + SPR (included). Line subtotal $7.50.\n- Add Pint (PINT) flavor COD (premium). Line subtotal $10.49.\nCart subtotal: $26.49. Apply promo SWEET5 -> taxable subtotal $21.49. Tax 0.089 -> $1.91. Tip $0.00. Total due $23.40.\nCheckout:\n- Pickup time 2025-07-14T18:30:00-07:00.\n- Use account A100238 with card last4 4242.\n- Order ID ORD-SEA-20250714-0931. Status CONFIRMED. Amount charged $23.40. Loyalty: earned 23 pts; new balance 143."
+    },
+    {
+      "id": "nyc_holiday_takehome_2025",
+      "name": "Holiday Take-home and Singles (NYC NYC-02)",
+      "text": "DateTime: 2025-12-05T14:35:00-05:00. Store: NYC-02, ZIP 10012, Tax 8.875%. No active promos.\nAccount: B889012 (Diego Ramos), phone +12125551212, loyalty points 45. Cards: Mastercard ****1881 default.\nInventory:\n- Flavors: PEP* 5/2 (Peppermint Bark, premium), VAN 10/6, CHO 0/0 (out), PIS* 2/1, SAL 6/3.\n- Toppings: WHP 40, FUD 25, CAN 18 (Crushed Candy Cane), PEC 10 (contains nuts).\n- Containers: CUP 250, SCN 55, WAF 0 (out).\nPricing: SCOOP-1 $4.50; PINT $8.99; premium scoop +$0.75; premium pint +$1.50; container surcharge CUP $0.\nCart flow:\n- Create cart CART-NYC-004402.\n- Add 2x Single Scoop (SCOOP-1) cups flavor PEP (premium). Each $5.25, line total $10.50.\n- Add 1x Single Scoop (SCOOP-1) cup flavor SAL. $4.50.\n- Add Pint (PINT) flavor VAN $8.99.\n- Add Pint (PINT) flavor PIS (premium) $10.49.\nSubtotal $34.48. No discounts. Tax 0.08875 -> $3.06. Tip $0.00. Total $37.54.\nCheckout:\n- Pickup time 2025-12-05T14:55:00-05:00.\n- Use account B889012 with card last4 1881.\n- Order ID ORD-NYC-20251205-2210. Status CONFIRMED. Amount charged $37.54. Loyalty: earned 37 pts; new balance 82."
+    },
+    {
+      "id": "atx_evening_treats_2025",
+      "name": "Evening Treats with Loyalty Redemption (Austin ATX-03)",
+      "text": "DateTime: 2025-04-22T20:05:00-05:00. Store: ATX-03, ZIP 78704, Tax 8.25%. No promos.\nAccount: C552771 (Ava Patel), phone +15125550110, loyalty points 80. Cards: Visa ****0099 default.\nInventory:\n- Flavors: COC 20/8 (Cookies & Cream), UBE* 3/1, MSB 0/0 (out), STR 7/3.\n- Toppings: FRS 1 (Fresh Strawberries), CHP 24 (Chocolate Chips), CAR 20 (Caramel).\n- Containers: CUP 220, SCN 70, WAF 2.\nPricing: SCOOP-1 $4.50; SCOOP-2 $6.75; SUNDAE-REG $7.50 incl 2 toppings, extra topping $0.75; premium scoop +$0.75; container surcharge WAF $1.00, CUP $0.\nCart flow:\n- Create cart CART-ATX-001233.\n- Add Double Scoop (SCOOP-2), container WAF, flavors UBE* + STR. Line $8.50 (6.75 + 1.00 + 0.75).\n- Add Sundae (SUNDAE-REG), flavors STR + STR, toppings FRS + CAR included, extra topping CHP +$0.75. Line $8.25.\n- Add Single Scoop (SCOOP-1) cup flavor COC. Line $4.50.\nSubtotal $21.25. Redeem 50 loyalty points = $5.00 off. Taxable subtotal $16.25. Tax 0.0825 -> $1.34. Tip $2.00. Total $19.59.\nCheckout:\n- Pickup time 2025-04-22T20:20:00-05:00.\n- Use account C552771 with card last4 0099, redeem_points 50, tip $2.00.\n- Order ID ORD-ATX-20250422-1459. Status CONFIRMED. Amount charged $19.59. Loyalty: redeemed 50, earned 16; new balance 46."
+    }
+  ],
+  "defaultScenarioId": "sea_afterwork_combo_2025"
+}

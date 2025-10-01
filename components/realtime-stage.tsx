@@ -4,8 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui';
 import { Mic, Square, Activity, Send } from 'lucide-react';
 import { useSettings } from './settings-context';
-import { toolSpecs } from '@/lib/tools';
-import { REALTIME_PROMPT } from '@/lib/realtime-prompt';
+// Dynamic tool specs & prompt are fetched at runtime
 import { SCENARIO_PRESETS } from '@/lib/scenarios';
 import ToolLog, { ToolCallRecord } from './tool-log';
 import { useFitText } from './use-fit-text';
@@ -60,9 +59,14 @@ export default function RealtimeStage() {
   const [overlayFontSize, setOverlayFontSize] = useState<number>(40); // legacy state (updated via hook)
   // Pull settings early so we can safely derive initial preset id
   const { scenario, temperature, voice, update } = useSettings();
+  const [rtTools, setRtTools] = useState<any[]>([]);
+  const lastToolSignatureRef = useRef<string>('');
+  const [configPrompt, setConfigPrompt] = useState<string>('');
+  const [configMeta, setConfigMeta] = useState<{ id:string; name:string; description:string } | null>(null);
+  const [configScenarios, setConfigScenarios] = useState<typeof SCENARIO_PRESETS>(SCENARIO_PRESETS);
   // Track selected preset id locally so dropdown reflects user choice even if string comparison fails
   const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
-    const match = SCENARIO_PRESETS.find(p => p.text === scenario);
+    const match = configScenarios.find(p => p.text === scenario);
     return match ? match.id : 'custom';
   });
 
@@ -389,10 +393,8 @@ export default function RealtimeStage() {
     dc.onopen = () => {
         setConnected(true);
     if (VERBOSE_TOOL_LOGS) console.log('[SESSION_DATA_CHANNEL_OPEN]', { sessionCounter: sessionIdRef.current, sessionUUID: sessionUUIDRef.current });
-    // Sanitize tool specs for realtime (remove non-standard fields like result_schema/sample_result)
-  const rtTools = toolSpecs.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters }));
-  // Scenario intentionally NOT inserted into model instructions; it's only used by tool execution layer.
-  dc.send(JSON.stringify({ type: 'session.update', session: { instructions: REALTIME_PROMPT, tools: rtTools, temperature, voice, tool_choice: 'auto' } }));
+    // Use dynamically fetched tool specs & prompt
+  dc.send(JSON.stringify({ type: 'session.update', session: { instructions: configPrompt || 'You are a domain agent.', tools: rtTools, temperature, voice, tool_choice: 'auto' } }));
         // mark starting complete
         sessionStartingRef.current = false; setStarting(false);
       };
@@ -515,23 +517,84 @@ export default function RealtimeStage() {
 
   // Scenario presets for dropdown
   // Determine active preset id (if any) by comparing text pointer or content
-  // Sync local selectedPresetId whenever scenario changes externally
+  // Sync local selectedPresetId whenever scenario changes externally (but not if user explicitly chose custom)
   useEffect(() => {
-    const match = SCENARIO_PRESETS.find(p => p.text === scenario);
+    // Only auto-sync if user hasn't explicitly chosen custom
+    if (selectedPresetId === 'custom') return;
+    const match = configScenarios.find(p => p.text === scenario);
     if (match) {
       if (selectedPresetId !== match.id) setSelectedPresetId(match.id);
-    } else if (selectedPresetId !== 'custom') {
+    } else {
       setSelectedPresetId('custom');
     }
-  }, [scenario, selectedPresetId]);
+  }, [scenario, selectedPresetId, configScenarios]);
+
+  // Fetch active config and specs once on mount
+  useEffect(()=> {
+    const load = async () => {
+      try {
+        console.log('[realtime-stage] Loading config and tool specs...');
+        const cfgResp = await fetch('/api/config').then(r=> r.json());
+        if (cfgResp?.active) {
+          console.log('[realtime-stage] Config loaded:', { id: cfgResp.active.id, name: cfgResp.active.name, toolCount: cfgResp.active.tools?.length, scenarioCount: cfgResp.active.scenarios?.length });
+          setConfigPrompt(cfgResp.active.prompt || '');
+          if (Array.isArray(cfgResp.active.scenarios)) setConfigScenarios(cfgResp.active.scenarios);
+          setConfigMeta({ id: cfgResp.active.id, name: cfgResp.active.name, description: cfgResp.active.description });
+          // If current scenario does not match any new scenario, set to defaultScenarioId or first
+          if (Array.isArray(cfgResp.active.scenarios) && cfgResp.active.scenarios.length) {
+            const currentMatch = cfgResp.active.scenarios.find((s:any)=> s.text === scenario);
+            if (!currentMatch) {
+              const desired = cfgResp.active.scenarios.find((s:any)=> s.id === cfgResp.active.defaultScenarioId) || cfgResp.active.scenarios[0];
+              if (desired) {
+                console.log('[realtime-stage] Switching to default scenario:', desired.id);
+                update({ scenario: desired.text });
+                setSelectedPresetId(desired.id);
+              }
+            } else {
+              setSelectedPresetId(currentMatch.id);
+            }
+          }
+        }
+        const specResp = await fetch('/api/tool-specs').then(r=> r.json());
+        if (specResp?.tools) {
+          const sanitized = specResp.tools
+            .filter((t: any) => t.name !== 'noop')
+            .map((t: any) => ({ type:'function', name:t.name, description:t.description, parameters:t.parameters }));
+          console.log('[realtime-stage] Tool specs loaded:', sanitized.map((t: any) => t.name).join(', '));
+          setRtTools(sanitized);
+          if (specResp.config && !configMeta) setConfigMeta(specResp.config);
+        }
+      } catch (e) { console.warn('[realtime-stage] config/spec fetch failed', e); }
+    };
+    load();
+    const handler = () => { console.log('[realtime-stage] industry-config-changed event received, reloading...'); load(); };
+    window.addEventListener('industry-config-changed', handler);
+    return () => { window.removeEventListener('industry-config-changed', handler); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Live session updates when parameters change while connected (scenario intentionally excluded from instructions)
   useEffect(()=> {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open' && streaming) {
-      const rtTools = toolSpecs.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters }));
-      dataChannelRef.current.send(JSON.stringify({ type: 'session.update', session: { instructions: REALTIME_PROMPT, temperature, voice, tools: rtTools, tool_choice: 'auto' } }));
+      console.log('[realtime-stage] Sending session.update with tools:', rtTools.map((t: any) => t.name).join(', '));
+      dataChannelRef.current.send(JSON.stringify({ type: 'session.update', session: { instructions: configPrompt || 'You are a domain agent.', temperature, voice, tools: rtTools, tool_choice: 'auto' } }));
     }
-  }, [scenario, temperature, voice, streaming]);
+  }, [scenario, temperature, voice, streaming, configPrompt, rtTools]);
+
+  // Auto reset session when tool specs materially change (names or count) so model adopts new toolset cleanly
+  useEffect(() => {
+    const signature = rtTools.map(t => t.name).sort().join('|');
+    if (!signature) return;
+    if (lastToolSignatureRef.current && lastToolSignatureRef.current !== signature) {
+      if (streaming) {
+        if (VERBOSE_TOOL_LOGS) console.log('[AUTO_SESSION_RESET_TOOLS_CHANGED]', { from: lastToolSignatureRef.current, to: signature });
+        stopSession();
+        setTimeout(() => { startSession(); }, 150);
+      }
+    }
+    lastToolSignatureRef.current = signature;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtTools]);
 
   return (
     <div className="w-full mx-auto flex flex-col gap-4 px-4">
@@ -629,23 +692,32 @@ export default function RealtimeStage() {
       <div className="w-full grid md:grid-cols-2 gap-4 items-start">
         <div className="border border-neutral-800 rounded-md p-3 bg-neutral-900/60">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">Active Scenario</div>
+            <div className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">Active Scenario{configMeta ? ` (${configMeta.name})` : ''}</div>
             <select
               value={selectedPresetId}
               onChange={e=> {
                 const id = e.target.value;
                 setSelectedPresetId(id);
                 if (id === 'custom') return; // retain custom text
-                const preset = SCENARIO_PRESETS.find(p => p.id === id);
+                const preset = configScenarios.find(p => p.id === id);
                 if (preset) update({ scenario: preset.text });
               }}
               className="bg-neutral-800 text-neutral-100 text-[11px] rounded px-2 py-1 border border-neutral-700 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             >
-              {SCENARIO_PRESETS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {configScenarios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               <option value="custom">Custom</option>
             </select>
           </div>
-          <pre className="whitespace-pre-wrap text-xs overflow-auto leading-relaxed text-neutral-200">{scenario}</pre>
+          {selectedPresetId === 'custom' ? (
+            <textarea
+              value={scenario}
+              onChange={e => update({ scenario: e.target.value })}
+              className="w-full text-xs bg-neutral-800/70 border border-neutral-700 focus:outline-none focus:ring-1 focus:ring-cyan-500 p-2 rounded whitespace-pre-wrap leading-relaxed text-neutral-200 font-mono min-h-[200px] resize-y"
+              placeholder="Enter custom scenario context..."
+            />
+          ) : (
+            <pre className="whitespace-pre-wrap text-xs overflow-auto leading-relaxed text-neutral-200">{scenario}</pre>
+          )}
         </div>
         <div className="border border-neutral-800 rounded-md p-3 bg-neutral-900/60 flex flex-col min-h-0 h-full">
           <div className="text-xs font-semibold tracking-wide text-neutral-400 mb-2 uppercase">Tool Calls (Live)</div>

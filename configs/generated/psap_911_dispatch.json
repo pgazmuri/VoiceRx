@@ -1,0 +1,520 @@
+{
+  "id": "psap_911_dispatch",
+  "name": "911 Dispatcher Agent",
+  "description": "Domain for triaging emergency calls, confirming location, providing pre-arrival instructions, creating CAD incidents, checking unit availability, dispatching, and updating incident status.",
+  "prompt": "You are a professional 911 dispatcher assistant for police, fire, and EMS.\n- Focus on rapid, concise, factual exchanges. Always confirm: exact location (address or GPS), callback number, nature of emergency, patient status (age, conscious, breathing), and safety threats (weapons, fire, hazards).\n- Do not guess response times or outcomes; rely on tool outputs for unit status, locations, and ETAs.\n- Provide standardized, script-like pre-arrival instructions only when indicated and tailored to the situation (e.g., CPR, bleeding control, fire evacuation). Avoid diagnosis or speculation.\n- If information is insufficient for safe guidance, ask targeted questions. Prioritize scene safety for caller and bystanders.\n- Do not collect unnecessary personal data. Record only what’s essential for dispatch.\n- If tools fail or the situation is life-threatening with unclear details, direct immediate safety actions and flag for escalation with [ESCALATE TO HUMAN].\nDefault to English unless the caller specifies another language.",
+  "tools": [
+    {
+      "name": "locate_caller",
+      "description": "Resolve caller location from phone metadata and/or provided coordinates.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "description": "Caller ANI, E.164 preferred"
+          },
+          "provided_address": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "resolved_address",
+          "city",
+          "state",
+          "zip",
+          "lat",
+          "lon",
+          "confidence"
+        ],
+        "properties": {
+          "resolved_address": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "place_name": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "description": "HIGH | MEDIUM | LOW"
+          },
+          "nearest_intersection": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "resolved_address": "401 S 4th St",
+        "city": "Las Vegas",
+        "state": "NV",
+        "zip": "89101",
+        "lat": 36.1663,
+        "lon": -115.1441,
+        "place_name": "Fremont East District",
+        "confidence": "HIGH",
+        "nearest_intersection": "S 4th St & E Bridger Ave"
+      }
+    },
+    {
+      "name": "get_prearrival_instructions",
+      "description": "Return standardized, step-by-step pre-arrival instructions for the specified protocol.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "protocol_code"
+        ],
+        "properties": {
+          "protocol_code": {
+            "type": "string",
+            "description": "e.g., EMD-9 (Cardiac Arrest), EFD-69 (Structure Fire), TRA-17 (MVC)"
+          },
+          "patient_age": {
+            "type": "integer"
+          },
+          "conscious": {
+            "type": "boolean"
+          },
+          "breathing": {
+            "type": "boolean"
+          },
+          "hazards_present": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "protocol_code",
+          "steps"
+        ],
+        "properties": {
+          "protocol_code": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cautions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "do_nots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "protocol_code": "EMD-9",
+        "steps": [
+          "Lay the patient flat on a hard surface.",
+          "Place the heel of your hand in the center of the chest; interlock hands.",
+          "Push hard and fast: 100–120 compressions per minute, depth 2 inches.",
+          "Allow full chest recoil; count aloud with me.",
+          "If an AED is available, turn it on and follow prompts. Resume compressions immediately after any shock."
+        ],
+        "cautions": [
+          "If vomit present, roll the patient to the side briefly to clear airway, then resume."
+        ],
+        "do_nots": [
+          "Do not stop CPR unless instructed or the patient shows clear signs of life.",
+          "Do not leave the patient alone."
+        ]
+      }
+    },
+    {
+      "name": "create_incident",
+      "description": "Create a CAD incident record for dispatch.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "call_id",
+          "location",
+          "incident_type",
+          "priority"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "location": {
+            "type": "object",
+            "required": [
+              "address",
+              "city",
+              "state",
+              "zip"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip": {
+                "type": "string"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              }
+            }
+          },
+          "incident_type": {
+            "type": "string",
+            "description": "e.g., CARDIAC_ARREST, STRUCTURE_FIRE, MVC_INJURY"
+          },
+          "priority": {
+            "type": "string",
+            "description": "E | 1 | 2 | 3"
+          },
+          "caller_name": {
+            "type": "string"
+          },
+          "callback_number": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "incident_id",
+          "created_at",
+          "incident_type",
+          "priority",
+          "radio_channel"
+        ],
+        "properties": {
+          "incident_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "incident_type": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "radio_channel": {
+            "type": "string"
+          },
+          "cross_streets": {
+            "type": "string"
+          },
+          "geohash": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "incident_id": "INC-2025-SEA-000731",
+        "created_at": "2025-09-30T14:22:37Z",
+        "incident_type": "CARDIAC_ARREST",
+        "priority": "E",
+        "radio_channel": "MED-TAC2",
+        "cross_streets": "6th Ave N & Mercer St",
+        "geohash": "c22yzp6yq"
+      }
+    },
+    {
+      "name": "query_units",
+      "description": "List nearby units and current statuses for an area and incident type.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          },
+          "incident_type": {
+            "type": "string"
+          },
+          "max_distance_miles": {
+            "type": "number",
+            "default": 15
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "units"
+        ],
+        "properties": {
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "unit_id",
+                "type",
+                "status"
+              ],
+              "properties": {
+                "unit_id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "AMBULANCE | ENGINE | LADDER | RESCUE | PATROL | HAZMAT | SUPERVISOR"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "AVAILABLE | ENROUTE | ON_SCENE | OUT_OF_SERVICE"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "eta_minutes": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "units": [
+          {
+            "unit_id": "MED-12",
+            "type": "AMBULANCE",
+            "status": "AVAILABLE",
+            "location": "Station 12 - 800 5th Ave",
+            "eta_minutes": 6
+          },
+          {
+            "unit_id": "ENG-24",
+            "type": "ENGINE",
+            "status": "AVAILABLE",
+            "location": "Station 24 - 401 Mercer St",
+            "eta_minutes": 3
+          },
+          {
+            "unit_id": "BATT-2",
+            "type": "SUPERVISOR",
+            "status": "ENROUTE",
+            "location": "Denny Way & 9th Ave N",
+            "eta_minutes": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "dispatch_units",
+      "description": "Assign units to an incident and return dispatch details.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "incident_id",
+          "unit_ids"
+        ],
+        "properties": {
+          "incident_id": {
+            "type": "string"
+          },
+          "unit_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "incident_id",
+          "assignments",
+          "message"
+        ],
+        "properties": {
+          "incident_id": {
+            "type": "string"
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "unit_id",
+                "status",
+                "dispatch_time",
+                "radio_channel",
+                "eta_minutes"
+              ],
+              "properties": {
+                "unit_id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "dispatch_time": {
+                  "type": "string"
+                },
+                "radio_channel": {
+                  "type": "string"
+                },
+                "eta_minutes": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "incident_id": "INC-2025-SEA-000731",
+        "assignments": [
+          {
+            "unit_id": "ENG-24",
+            "status": "ENROUTE",
+            "dispatch_time": "2025-09-30T14:23:05Z",
+            "radio_channel": "MED-TAC2",
+            "eta_minutes": 3
+          },
+          {
+            "unit_id": "MED-12",
+            "status": "ENROUTE",
+            "dispatch_time": "2025-09-30T14:23:06Z",
+            "radio_channel": "MED-TAC2",
+            "eta_minutes": 6
+          }
+        ],
+        "message": "Units dispatched on MED-TAC2."
+      }
+    },
+    {
+      "name": "update_incident_status",
+      "description": "Update CAD incident priority or add notes/status changes.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "incident_id"
+        ],
+        "properties": {
+          "incident_id": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "CREATED | DISPATCHED | ON_SCENE | TRANSPORTING | CLEARED"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "incident_id",
+          "updated_at"
+        ],
+        "properties": {
+          "incident_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "incident_id": "INC-2025-SEA-000731",
+        "updated_at": "2025-09-30T14:25:40Z",
+        "priority": "E",
+        "status": "DISPATCHED",
+        "notes": "Caller performing CPR; AED retrieved."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "sea_gym_cardiac_2025",
+      "name": "Cardiac Arrest at Downtown Gym (Seattle, WA)",
+      "text": "DateTime: 2025-09-30T14:21:58-07:00.\nCaller: Jason Park, phone +12065550123. Call ID CALL-SEA-20250930-001.\nReported Location: 1200 Westlake Ave N, Seattle, WA 98109, inside \"Pulse Fitness\" 2nd floor. Provided GPS: lat 47.6289 lon -122.3383.\nPatient: Male ~58, not conscious, not breathing normally. AED on-site at front desk. No known hazards. Protocol EMD-9 Cardiac Arrest. Priority E.\nCAD: Incident to create as CARDIAC_ARREST at above address. Cross streets: Westlake Ave N & Harrison St. Radio channel MED-TAC2.\nUnits availability (Seattle):\n- MED-12 (Ambulance) AVAILABLE at Station 12, 800 5th Ave, ETA 6 min to scene.\n- ENG-24 (Engine) AVAILABLE at Station 24, 401 Mercer St, ETA 3 min to scene.\n- BATT-2 (Supervisor) AVAILABLE near Denny Way & 9th Ave N, ETA 4 min to scene.\nDispatch plan: ENG-24, MED-12, BATT-2. Expected assignments set to ENROUTE on MED-TAC2.\nPre-arrival: Give CPR instructions with AED prompts; advise to send a bystander to get AED and to put phone on speaker.\nSubsequent status update: \"Caller performing compressions; AED pads applied; one shock advised and delivered; compressions resumed.\""
+    },
+    {
+      "id": "bx_apartment_fire_2025",
+      "name": "Apartment Kitchen Fire (Bronx, NY)",
+      "text": "DateTime: 2025-11-12T19:42:11-05:00.\nCaller: Elena Martinez, phone +17185557890. Call ID CALL-NYC-20251112-117.\nReported Location: 2735 Grand Concourse, Apt 5C, Bronx, NY 10458 (5th floor). Smoke and active flames from stove; fire extending to cabinets. Two adults, one child evacuating; neighbor may be mobility-impaired in Apt 5B. No known gas odors; building sprinkler present.\nProtocol EFD-69 Structure Fire. Priority 1.\nCAD: Incident STRUCTURE_FIRE at above address. Cross streets: E 196th St & E 197th St. Radio channel FIRE-TAC4.\nUnits availability (Bronx):\n- ENG-88 AVAILABLE at 2225 Belmont Ave, ETA 4 min.\n- LAD-56 AVAILABLE at 2920 Briggs Ave, ETA 5 min.\n- RES-3 AVAILABLE at 1655 Crotona Ave, ETA 8 min.\n- BATT-15 AVAILABLE at 2467 Webster Ave, ETA 6 min.\nDispatch plan: ENG-88, LAD-56, RES-3, BATT-15.\nPre-arrival: Instruct immediate evacuation, close doors behind, pull alarm, do not attempt to fight fire, avoid smoke, meet crews at entrance with apartment keys if safe.\nStatus progression: On dispatch, units ENROUTE on FIRE-TAC4; later update note \"Building alarm activated, occupants evacuating, possible person remaining Apt 5B (limited mobility).\""
+    },
+    {
+      "id": "atx_i35_mvc_2026",
+      "name": "Multi-Vehicle Collision with Fuel Leak (Austin, TX)",
+      "text": "DateTime: 2026-03-08T08:17:33-06:00. Weather: light rain.\nCaller: Priya Shah, phone +15125550111. Call ID CALL-ATX-20260308-045.\nReported Location: I-35 NB near Exit 245, mile marker 245, Austin, TX 78753. Provided GPS: lat 30.3802 lon -97.6894. Three vehicles involved; one rollover. One adult male trapped, bleeding from leg; fuel leaking from pickup. No active fire. Protocol TRA-17 MVC with injuries and entrapment. Priority 1.\nCAD: Incident MVC_INJURY at I-35 NB MM245 near E Rundberg Ln overpass. Radio channel OPS-TAC3.\nUnits availability (Austin):\n- EMS-05 (Ambulance) AVAILABLE at 5318 Cameron Rd, ETA 7 min.\n- ENG-11 (Engine) AVAILABLE at 1605 Kinney Ave, ETA 9 min to scene given traffic.\n- RES-2 (Rescue) AVAILABLE at 3002 Windsor Rd, ETA 11 min.\n- DPS-HP-23 (Patrol) AVAILABLE near Braker Ln, ETA 6 min.\nDispatch plan: EMS-05, ENG-11, RES-2, DPS-HP-23. Consider HAZMAT standby if leak worsens.\nPre-arrival: Advise callers to stay upwind, turn off vehicle ignitions, do not smoke, keep distance 150 feet from leak, apply firm pressure with clean cloth to leg bleed if safe, do not move trapped person.\nFollow-up note: \"Fuel leak continuing, vehicles moved to right shoulder except rollover; traffic lanes 2–3 blocked.\""
+    }
+  ],
+  "defaultScenarioId": "sea_gym_cardiac_2025"
+}

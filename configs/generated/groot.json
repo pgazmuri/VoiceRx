@@ -1,0 +1,175 @@
+{
+  "id": "groot",
+  "name": "I Am Groot Agent",
+  "description": "A minimal agent that consults a single truth tool to determine if it should respond with \"I am groot.\" The am_i_groot tool returns true (yes) by default unless the active scenario specifies overrides for certain utterances or contexts.",
+  "prompt": "You are a very minimalistic agent. For every user input, call am_i_groot first and base your entire reply solely on its output. If am_i_groot.is_groot is true, reply exactly: \"I am groot\". If false, reply exactly: \"I am not groot\". Do not add any extra words, punctuation, or emojis. Do not explain your reasoning. Do not use any other tools even if available. Do not fabricate; if the tool fails, say \"I am not groot\". Keep responses in the user’s language only if am_i_groot returns true with a non-English language hint; otherwise still use the exact required phrase above.",
+  "tools": [
+    {
+      "name": "am_i_groot",
+      "description": "Determines if the agent should answer \"I am groot\" for the given utterance and context. Returns true unless the scenario defines an override.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "utterance"
+        ],
+        "properties": {
+          "utterance": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "description": "BCP-47 code, e.g., en, es, fr"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO-8601"
+          },
+          "location": {
+            "type": "string",
+            "description": "Optional contextual location identifier"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "is_groot"
+        ],
+        "properties": {
+          "is_groot": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "is_groot": true,
+        "confidence": 0.99,
+        "reason": "Default true; no scenario override matched."
+      }
+    },
+    {
+      "name": "noop",
+      "description": "No-op used to persist lightweight session markers. Not intended for runtime use by this agent.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "marker": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "echo": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "ok": true,
+        "echo": "marker: init"
+      }
+    },
+    {
+      "name": "set_language",
+      "description": "Set a session language preference. The agent will still only answer via am_i_groot results.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "language_code"
+        ],
+        "properties": {
+          "language_code": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "language_code",
+          "set"
+        ],
+        "properties": {
+          "language_code": {
+            "type": "string"
+          },
+          "set": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sampleResult": {
+        "language_code": "es",
+        "set": true
+      }
+    },
+    {
+      "name": "groot_facts",
+      "description": "Returns fun Groot-related facts. Not used by the agent for replies but available for testing.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "facts"
+        ],
+        "properties": {
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "facts": [
+          "Groot is a Flora colossus.",
+          "He can regenerate from a twig."
+        ],
+        "topic": "general"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "default",
+      "name": "Default: Always Groot (with one false check)",
+      "text": "Context: No special constraints. Timestamp 2025-09-30T12:00:00Z location NOWHERE-BASE.\nTool behavior for am_i_groot:\n- If utterance equals \"Are you Rocket?\" (case-insensitive), return {is_groot:false, confidence:0.95, reason:\"Override: comparing to Rocket\"}.\n- For utterance \"Who are you?\": {is_groot:true, confidence:0.99}.\n- For utterance \"Are you Groot?\": {is_groot:true, confidence:1.0}.\n- For any other utterance: {is_groot:true, confidence:0.90}.\nNo other tool effects."
+    },
+    {
+      "id": "maintenance_mode",
+      "name": "Maintenance Window: Mostly Not Groot",
+      "text": "Context: 2025-10-31T23:00:00Z-2025-11-01T01:00:00Z location KNOWHERE-STATION K-001.\nTool behavior for am_i_groot during this window:\n- If utterance contains \"status\" or \"diagnostic\" (case-insensitive): {is_groot:false, confidence:0.98, reason:\"Maintenance diagnostic\"}.\n- If utterance equals \"Are you Groot?\": {is_groot:false, confidence:0.97, reason:\"Maintenance window\"}.\n- If utterance equals \"Are you Rocket?\": {is_groot:false, confidence:0.99, reason:\"Not Rocket either\"}.\n- All other utterances: {is_groot:false, confidence:0.95, reason:\"Maintenance default\"}.\nOutside this window, fall back to default behavior (true unless an explicit override exists)."
+    },
+    {
+      "id": "multilingual_edge",
+      "name": "Multilingual Edge Cases (ES and FR)",
+      "text": "Context: Language-driven overrides. Timestamp 2025-12-05T09:15:00Z location XANDAR-PLAZA.\nTool behavior for am_i_groot:\n- If language == \"es\" and utterance \"¿Eres Groot?\": {is_groot:true, confidence:0.99}.\n- If language == \"es\" and utterance \"¿Eres Rocket?\": {is_groot:false, confidence:0.99}.\n- If language == \"fr\" and utterance \"Es-tu Groot ?\": {is_groot:true, confidence:0.98}.\n- If language == \"fr\" and utterance contains \"Rocket\": {is_groot:false, confidence:0.98}.\n- Any language with utterance exactly \"Are you Rocket?\": {is_groot:false, confidence:0.99}.\n- Otherwise: {is_groot:true, confidence:0.92}."
+    }
+  ],
+  "defaultScenarioId": "default"
+}

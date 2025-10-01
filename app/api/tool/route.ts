@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
-import { getTool, parseScenario } from '@/lib/tools';
+// Use active industry config for tool definitions instead of static pharmacy tools
+import { getActiveConfig } from '@/lib/industry-config';
+import { parseScenario as legacyParseScenario } from '@/lib/tools';
 import fs from 'fs/promises';
 import path from 'path';
 import { DEFAULT_SCENARIO } from '@/lib/defaultScenario';
@@ -38,14 +40,27 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     if (body.scenario) scenarioMemory = body.scenario;
-    const { tool, args } = body;
-    const t = getTool(tool);
-    if (!t) return new Response(JSON.stringify({ error: 'tool_not_found' }), { status: 404 });
-    const scenarioHash = hashArgs({ scenarioMemory });
+  const { tool, args } = body;
+  const active = getActiveConfig();
+  const t = active.tools.find(x => x.name === tool);
+  if (!t) {
+    try { console.warn('[tool_not_found]', { requested: tool, activeConfig: active.id, available: active.tools.map(x=>x.name) }); } catch {}
+    return new Response(JSON.stringify({ error: 'tool_not_found', tool, activeConfig: active.id }), { status: 404 });
+  }
+  const scenarioHash = hashArgs({ scenarioMemory, config: active.id });
     if (tool === 'noop') {
+      // Diagnostic logging: noop should generally not be invoked by the model anymore (removed from exposed specs)
+      try {
+        console.log('[tool.noop_invoked]', {
+          activeConfig: active.id,
+          args,
+          scenarioSnippet: (scenarioMemory||'').slice(0,140),
+          hint: 'If this appears frequently, verify /api/tool-specs excludes noop and realtime stage received updated specs.'
+        });
+      } catch {}
       const result = { ok: true };
       await cacheSet(tool, args||{}, scenarioHash, { result });
-      return new Response(JSON.stringify({ tool, result, cached: false }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ tool, result, cached: false, diagnostic:true }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     const cached = await cacheGet(tool, args||{}, scenarioHash);
     if (cached) {
@@ -56,9 +71,9 @@ export async function POST(req: NextRequest) {
     // LLM powered mock via Responses API
     try {
       const apiKey = await readKey();
-      const system = `You are a PBM / pharmacy benefit tool simulator. Scenario context: \n${scenarioMemory}\nReturn ONLY strict JSON matching the provided result schema.`;
-      const toolMeta = t;
-      const prompt = `Tool: ${toolMeta.name}\nDescription: ${toolMeta.description}\nArgs JSON: ${JSON.stringify(args)}\nResult Schema JSON: ${JSON.stringify(toolMeta.resultSchema)}\nSample Result (example): ${JSON.stringify(toolMeta.sampleResult || {})}\nReturn ONLY JSON.`;
+      const toolMeta = t as any;
+      const system = `You are a tool result simulator for the domain: ${active.name} (id: ${active.id}).\nDomain description: ${active.description}.\nScenario context:\n${scenarioMemory}\nProduce ONLY strict JSON adhering to the provided result schema. No extra keys. If uncertain, provide realistic but clearly simulated values.`;
+      const prompt = `Tool: ${toolMeta.name}\nDescription: ${toolMeta.description}\nArgs JSON: ${JSON.stringify(args || {})}\nResult Schema JSON: ${JSON.stringify(toolMeta.resultSchema)}\nSample Result (example): ${JSON.stringify(toolMeta.sampleResult || {})}\nReturn ONLY JSON.`;
       const resp = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -73,8 +88,8 @@ export async function POST(req: NextRequest) {
     }
 
     await cacheSet(tool, args||{}, scenarioHash, { result });
-    const meta = parseScenario(scenarioMemory);
-    return new Response(JSON.stringify({ tool, result, scenario_meta: meta, cached: false }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const meta = (active.parseScenario ? active.parseScenario(scenarioMemory) : legacyParseScenario(scenarioMemory));
+    return new Response(JSON.stringify({ tool, result, scenario_meta: meta, cached: false, config: active.id }), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || 'unknown' }), { status: 500 });
   }

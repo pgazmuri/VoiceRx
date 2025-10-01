@@ -1,0 +1,578 @@
+{
+  "id": "auto_parts_voice",
+  "name": "Auto Parts Store Associate Voice Agent",
+  "description": "Voice assistant for retail/commercial auto parts stores: fitment checks, inventory, pricing, reservations, and store navigation.",
+  "prompt": "You are a voice agent for an auto parts store associate.\n- Never guess vehicle fitment. Ask for VIN or year, make, model, and engine when needed. Confirm before quoting or reserving.\n- Keep replies brief and actionable. Use tools only when they add clear value; cite tool-derived facts explicitly (e.g., \"Inventory shows 3 on hand at Store 102\").\n- Safety: Do not provide hazardous repair instructions, torque specs, or bypass procedures. Offer high-level guidance only and recommend consulting the vehicle service manual or a certified technician for installation steps.\n- Respect privacy: do not collect or expose sensitive personal data. Use reservation codes rather than personal identifiers.\n- If you cannot complete the request or the user insists, say [ESCALATE TO HUMAN]. Default to English unless asked otherwise.",
+  "tools": [
+    {
+      "name": "check_fitment",
+      "description": "Validate part compatibility for a specific vehicle using VIN or year/make/model/engine, and return compatible options.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "vehicle",
+          "part_reference"
+        ],
+        "properties": {
+          "vehicle": {
+            "type": "object",
+            "properties": {
+              "vin": {
+                "type": "string"
+              },
+              "year": {
+                "type": "integer"
+              },
+              "make": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "engine": {
+                "type": "string"
+              }
+            }
+          },
+          "part_reference": {
+            "type": "object",
+            "properties": {
+              "part_number": {
+                "type": "string"
+              },
+              "part_category": {
+                "type": "string",
+                "description": "e.g., Brake Pads, Alternator, Battery"
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "compatible",
+          "confidence",
+          "notes"
+        ],
+        "properties": {
+          "compatible": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "matched_vehicle": {
+            "type": "object",
+            "properties": {
+              "year": {
+                "type": "integer"
+              },
+              "make": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "engine": {
+                "type": "string"
+              }
+            }
+          },
+          "part_suggestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "part_number",
+                "brand",
+                "description"
+              ],
+              "properties": {
+                "part_number": {
+                  "type": "string"
+                },
+                "brand": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "requires_core": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "compatible": true,
+        "confidence": 0.96,
+        "notes": "Direct fit front brake pads; confirm rotor diameter 262mm.",
+        "matched_vehicle": {
+          "year": 2014,
+          "make": "Honda",
+          "model": "Civic",
+          "engine": "1.8L L4"
+        },
+        "part_suggestions": [
+          {
+            "part_number": "BP1234",
+            "brand": "SureStop",
+            "description": "Ceramic Brake Pads - Front",
+            "requires_core": false
+          },
+          {
+            "part_number": "BP1234P",
+            "brand": "ProLine",
+            "description": "Ceramic Brake Pads - Front (Premium)",
+            "requires_core": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "lookup_inventory",
+      "description": "Check real-time store inventory for a specific part.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "part_number"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Desired quantity"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "part_number",
+          "on_hand"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "part_number": {
+            "type": "string"
+          },
+          "on_hand": {
+            "type": "integer"
+          },
+          "aisle_bin": {
+            "type": "string"
+          },
+          "eta_restock": {
+            "type": "string"
+          },
+          "alternates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "store_id": "STR102",
+        "part_number": "BP1234",
+        "on_hand": 3,
+        "aisle_bin": "Aisle 5 - Bin C12",
+        "eta_restock": "2025-09-28",
+        "alternates": [
+          "BP1234P",
+          "BP1234ECO"
+        ]
+      }
+    },
+    {
+      "name": "get_price_quote",
+      "description": "Generate a price quote including taxes estimate, discounts, and core charges.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "part_number",
+          "quantity",
+          "store_id"
+        ],
+        "properties": {
+          "part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "account_type": {
+            "type": "string",
+            "enum": [
+              "RETAIL",
+              "COMMERCIAL"
+            ],
+            "default": "RETAIL"
+          },
+          "promo_code": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "part_number",
+          "quantity",
+          "unit_price",
+          "subtotal",
+          "total"
+        ],
+        "properties": {
+          "part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "discounts": {
+            "type": "number"
+          },
+          "core_charge": {
+            "type": "number"
+          },
+          "tax_estimate": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "price_source": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "part_number": "ALT-2210",
+        "quantity": 1,
+        "unit_price": 219.99,
+        "discounts": 20,
+        "core_charge": 35,
+        "tax_estimate": 14.85,
+        "subtotal": 234.99,
+        "total": 284.84,
+        "price_source": "Store STR204 - Retail",
+        "notes": "Commercial pricing available with account; promo SAVE10 applied."
+      }
+    },
+    {
+      "name": "place_reservation",
+      "description": "Place a hold or initiate transfer/ship-to-store for pickup. Generates a pickup code (no personal data required).",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "part_number",
+          "quantity",
+          "fulfillment"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "fulfillment": {
+            "type": "string",
+            "enum": [
+              "HOLD",
+              "TRANSFER",
+              "SHIP_TO_STORE"
+            ]
+          },
+          "hold_until": {
+            "type": "string",
+            "description": "ISO datetime for in-store holds"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "reservation_id",
+          "status",
+          "pickup_code",
+          "estimated_ready",
+          "store_id",
+          "part_number",
+          "quantity"
+        ],
+        "properties": {
+          "reservation_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "pickup_code": {
+            "type": "string"
+          },
+          "estimated_ready": {
+            "type": "string"
+          },
+          "pickup_deadline": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "reservation_id": "RSV-77821",
+        "status": "HOLD_CONFIRMED",
+        "pickup_code": "7942",
+        "estimated_ready": "2025-09-24T14:30:00Z",
+        "pickup_deadline": "2025-09-25T23:00:00Z",
+        "store_id": "STR102",
+        "part_number": "BP1234P",
+        "quantity": 1,
+        "message": "Held at counter. Bring pickup code to cashier."
+      }
+    },
+    {
+      "name": "find_stores",
+      "description": "Locate nearby stores by ZIP and radius, optionally filter by services.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "zip_code"
+        ],
+        "properties": {
+          "zip_code": {
+            "type": "string"
+          },
+          "radius_miles": {
+            "type": "number",
+            "default": 10
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "e.g., Battery Testing, Alternator Bench Test, Install"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "stores"
+        ],
+        "properties": {
+          "stores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "store_id",
+                "name",
+                "address",
+                "distance_miles",
+                "hours"
+              ],
+              "properties": {
+                "store_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "distance_miles": {
+                  "type": "number"
+                },
+                "hours": {
+                  "type": "string"
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "stores": [
+          {
+            "store_id": "STR102",
+            "name": "AutoParts Central - Midtown",
+            "address": "101 Main St, Springfield, IL 62704",
+            "phone": "555-0134",
+            "distance_miles": 1.3,
+            "hours": "Mon-Sat 7:30-21:00, Sun 9:00-19:00",
+            "services": [
+              "Battery Testing",
+              "Check Engine Light Scan"
+            ]
+          },
+          {
+            "store_id": "STR204",
+            "name": "AutoParts Central - Westside",
+            "address": "450 Elm Ave, Springfield, IL 62711",
+            "phone": "555-0199",
+            "distance_miles": 5.8,
+            "hours": "Mon-Sat 7:00-21:00, Sun 9:00-19:00",
+            "services": [
+              "Alternator Bench Test",
+              "Rotor Resurfacing"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "check_order_status",
+      "description": "Check reservation/order status and pickup window.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "reservation_id"
+        ],
+        "properties": {
+          "reservation_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "reservation_id",
+          "status",
+          "store_id",
+          "estimated_ready"
+        ],
+        "properties": {
+          "reservation_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "estimated_ready": {
+            "type": "string"
+          },
+          "pickup_deadline": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "part_number",
+                "quantity"
+              ],
+              "properties": {
+                "part_number": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "reservation_id": "RSV-77821",
+        "status": "READY_FOR_PICKUP",
+        "store_id": "STR102",
+        "estimated_ready": "2025-09-24T14:30:00Z",
+        "pickup_deadline": "2025-09-25T23:00:00Z",
+        "items": [
+          {
+            "part_number": "BP1234P",
+            "quantity": 1
+          }
+        ],
+        "message": "Held at front counter with pickup code 7942."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "weekend_brakes_diy",
+      "name": "DIY Weekend Brake Job",
+      "text": "Customer: Wants front brake pads and rotors today for a 2014 Honda Civic 1.8L. Priority: in-stock for pickup today at Store STR102; budget-sensitive but prefers ceramic pads. Needs brake cleaner and hardware kit if available. Notes: Customer has basic tools; avoid step-by-step repair instructions. Offer rotors that match 262mm diameter and a hardware kit upsell. If pads/rotors not in stock, propose transfer from STR204 same day if possible and place a hold. Goal: confirm fitment, quote total with tax estimate, and reserve items."
+    },
+    {
+      "id": "mobile_mechanic_alternator",
+      "name": "Mobile Mechanic Alternator + Core",
+      "text": "Customer: Mobile mechanic seeking an alternator for a 2012 Ford F-150 5.0L by VIN. Needs amperage match and pulley type confirmed. Core charge and bench test service required. Time-sensitive; can pick up at nearest store with stock or accept store-to-store transfer. Preference: commercial pricing if available, provide core return guidance. Goal: verify fitment via VIN, quote with core and commercial discount, check inventory at STR204/STR102, then reserve with pickup code."
+    },
+    {
+      "id": "battery_winter_readiness",
+      "name": "Winter Battery Replacement",
+      "text": "Customer: 2017 Subaru Outback 2.5L. Symptoms: slow crank in cold mornings. Needs correct battery group size (likely Group 25 or 24F—confirm), CCA >= 600, and terminal orientation. Interested in free battery testing at store and recycling of old battery. Wants nearest store with stock today and total price including recycling fee. Goal: confirm fitment, find stores near ZIP 62704, quote pricing with any promos, and place a hold."
+    }
+  ],
+  "defaultScenarioId": "weekend_brakes_diy"
+}

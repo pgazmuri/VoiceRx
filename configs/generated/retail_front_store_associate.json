@@ -1,0 +1,661 @@
+{
+  "id": "retail_front_store_associate",
+  "name": "Retail Front Store Associate Assistant",
+  "description": "Voice assistant for retail floor associates: locate products, check prices and promos, compare and recommend alternatives, and log store service issues for triage and dispatch.",
+  "prompt": "You are a voice assistant for front-of-store associates.\n- Keep responses brief, clear, and action-oriented. Confirm store ID before inventory or pricing.\n- Quote facts from tools (aisle/bay, on-hand, prices, promos) and avoid guessing. If data is missing or conflicting, say so and offer next steps.\n- Safety: For hazards, advise to secure the area and log a service ticket. For confrontations or emergencies, prompt: \"Contact a manager and follow store safety protocol.\"\n- Privacy: Do not collect payment data, SSNs, or home addresses. Use first names or roles, not full PII.\n- No external web lookups. If tool or policy limits block a request or the user insists beyond scope, say [ESCALATE TO HUMAN].\n- Default to concise professional English; read back details before confirming service tickets.",
+  "tools": [
+    {
+      "name": "locate_product_inventory",
+      "description": "Find products in a specific store with aisle/bay and on-hand quantities.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "description": "Name/keywords, e.g., \"AA batteries\""
+          },
+          "sku": {
+            "type": "string"
+          },
+          "upc": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "number",
+            "default": 10
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "products"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sku",
+                "name",
+                "aisle",
+                "on_hand_qty",
+                "last_updated"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "upc": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "brand": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                },
+                "aisle": {
+                  "type": "string"
+                },
+                "bay": {
+                  "type": "string"
+                },
+                "on_hand_qty": {
+                  "type": "number"
+                },
+                "sellable_qty": {
+                  "type": "number"
+                },
+                "shelf_tag_price": {
+                  "type": "number"
+                },
+                "currency": {
+                  "type": "string",
+                  "default": "USD"
+                },
+                "location_notes": {
+                  "type": "string"
+                },
+                "last_updated": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "store_id": "1182",
+        "products": [
+          {
+            "sku": "EV-AA8",
+            "upc": "0001234567890",
+            "name": "Everyday Value AA Alkaline Batteries 8-Pack",
+            "brand": "Everyday Value",
+            "size": "8 ct",
+            "aisle": "9",
+            "bay": "B1",
+            "on_hand_qty": 22,
+            "sellable_qty": 22,
+            "shelf_tag_price": 6.49,
+            "currency": "USD",
+            "location_notes": "Side cap near flashlights",
+            "last_updated": "2025-11-05T15:20:10Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_product_pricing",
+      "description": "Retrieve current price and promotions for a SKU or UPC at a given store.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "upc": {
+            "type": "string"
+          },
+          "customer_type": {
+            "type": "string",
+            "enum": [
+              "REGULAR",
+              "MEMBER",
+              "EMPLOYEE"
+            ],
+            "default": "REGULAR"
+          },
+          "date": {
+            "type": "string",
+            "description": "ISO date"
+          },
+          "quantity": {
+            "type": "number",
+            "default": 1
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "sku",
+          "base_price",
+          "final_price"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "upc": {
+            "type": "string"
+          },
+          "base_price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string",
+            "default": "USD"
+          },
+          "unit": {
+            "type": "string",
+            "description": "e.g., each, lb"
+          },
+          "promotions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "description"
+              ],
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "promo_id": {
+                  "type": "string"
+                },
+                "savings_amount": {
+                  "type": "number"
+                },
+                "savings_type": {
+                  "type": "string",
+                  "enum": [
+                    "INSTANT",
+                    "LOYALTY",
+                    "BOGO",
+                    "PERCENT_OFF"
+                  ]
+                },
+                "expires_on": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "loyalty_savings": {
+            "type": "number"
+          },
+          "final_price": {
+            "type": "number"
+          },
+          "per_unit_price": {
+            "type": "number"
+          },
+          "price_valid_from": {
+            "type": "string"
+          },
+          "price_valid_to": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "store_id": "1182",
+        "sku": "041333415014",
+        "upc": "041333415014",
+        "base_price": 9.99,
+        "currency": "USD",
+        "unit": "each",
+        "promotions": [
+          {
+            "description": "Buy 1, get 1 50% off (Members)",
+            "promo_id": "PR-BOGO50-202511",
+            "savings_type": "BOGO",
+            "expires_on": "2025-11-12"
+          }
+        ],
+        "loyalty_savings": 0,
+        "final_price": 9.99,
+        "per_unit_price": 1.25,
+        "price_valid_from": "2025-11-01",
+        "price_valid_to": "2025-11-12"
+      }
+    },
+    {
+      "name": "compare_products",
+      "description": "Compare multiple products on key attributes to explain differences.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "skus"
+        ],
+        "properties": {
+          "skus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Desired attributes to highlight"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sku",
+                "name",
+                "attributes"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "attributes": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "similarities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suggested_choice": {
+            "type": "object",
+            "properties": {
+              "sku": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "items": [
+          {
+            "sku": "HS-135",
+            "name": "Head & Shoulders Classic Clean 13.5 oz",
+            "attributes": {
+              "size": "13.5 oz",
+              "active_ingredient": "Pyrithione Zinc 1%",
+              "sulfate_free": false,
+              "scent": "Fresh",
+              "hair_type": "Dandruff/All"
+            }
+          },
+          {
+            "sku": "DV-120",
+            "name": "Dove Daily Moisture 12 oz",
+            "attributes": {
+              "size": "12 oz",
+              "active_ingredient": "None",
+              "sulfate_free": true,
+              "scent": "Clean",
+              "hair_type": "Normal to Dry"
+            }
+          }
+        ],
+        "similarities": [
+          "Both are everyday shampoos available in aisle 14"
+        ],
+        "differences": [
+          "HS-135 contains anti-dandruff active; DV-120 is sulfate-free and more moisturizing"
+        ],
+        "suggested_choice": {
+          "sku": "HS-135",
+          "rationale": "Choose HS-135 for dandruff control; pick DV-120 for moisture and sulfate-free preference."
+        }
+      }
+    },
+    {
+      "name": "suggest_alternatives",
+      "description": "Recommend similar products available in-store based on need or constraints.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "upc": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "OOS",
+              "CHEAPER",
+              "DIETARY",
+              "BRAND_PREF",
+              "SIZE_PREF",
+              "FEATURE_PREF"
+            ]
+          },
+          "max_results": {
+            "type": "number",
+            "default": 5
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "alternatives"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sku",
+                "name",
+                "price",
+                "availability"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "upc": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "price": {
+                  "type": "number"
+                },
+                "currency": {
+                  "type": "string",
+                  "default": "USD"
+                },
+                "aisle": {
+                  "type": "string"
+                },
+                "bay": {
+                  "type": "string"
+                },
+                "availability": {
+                  "type": "string",
+                  "enum": [
+                    "IN_STOCK",
+                    "LOW_STOCK",
+                    "OOS"
+                  ]
+                },
+                "on_hand_qty": {
+                  "type": "number"
+                },
+                "similarity_score": {
+                  "type": "number"
+                },
+                "notes": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "store_id": "1182",
+        "alternatives": [
+          {
+            "sku": "EV-AA8",
+            "upc": "0001234567890",
+            "name": "Everyday Value AA Alkaline Batteries 8-Pack",
+            "price": 6.49,
+            "currency": "USD",
+            "aisle": "9",
+            "bay": "B1",
+            "availability": "IN_STOCK",
+            "on_hand_qty": 22,
+            "similarity_score": 0.92,
+            "notes": "Lower price store brand; same size 8 ct"
+          },
+          {
+            "sku": "EN-AA8",
+            "upc": "039800011329",
+            "name": "Energizer MAX AA 8-Pack",
+            "price": 8.99,
+            "currency": "USD",
+            "aisle": "9",
+            "bay": "B2",
+            "availability": "IN_STOCK",
+            "on_hand_qty": 9,
+            "similarity_score": 0.87,
+            "notes": "Comparable premium brand"
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_facility_service_ticket",
+      "description": "Log a store service issue (spill, cleanup, maintenance) for triage and dispatch.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "reported_by",
+          "category",
+          "description",
+          "location"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "reported_by": {
+            "type": "string",
+            "description": "Associate ID or role"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "SPILL",
+              "CLEANUP",
+              "GRAFFITI",
+              "SAFETY_HAZARD",
+              "DOOR_ISSUE",
+              "EQUIPMENT",
+              "RESTROOM",
+              "TRASH",
+              "OTHER"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "location": {
+            "type": "object",
+            "required": [
+              "area"
+            ],
+            "properties": {
+              "area": {
+                "type": "string",
+                "description": "e.g., Aisle 6, Front Entrance East"
+              },
+              "aisle": {
+                "type": "string"
+              },
+              "bay": {
+                "type": "string"
+              },
+              "near": {
+                "type": "string",
+                "description": "Landmark, e.g., dairy cooler"
+              }
+            }
+          },
+          "requires_block_off": {
+            "type": "boolean",
+            "default": false
+          },
+          "photo_url": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ticket_id",
+          "status",
+          "priority",
+          "assigned_team",
+          "sla_minutes",
+          "created_at"
+        ],
+        "properties": {
+          "ticket_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "ACKNOWLEDGED",
+              "IN_PROGRESS",
+              "RESOLVED"
+            ],
+            "default": "QUEUED"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "assigned_team": {
+            "type": "string"
+          },
+          "sla_minutes": {
+            "type": "number"
+          },
+          "triage_notes": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "ticket_id": "SV-1182-20251105-006",
+        "status": "QUEUED",
+        "priority": "HIGH",
+        "assigned_team": "Front Service",
+        "sla_minutes": 10,
+        "triage_notes": "Spill in customer pathway; block off and clean ASAP",
+        "created_at": "2025-11-05T15:27:44Z"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "batteries_locate_price_alternatives",
+      "name": "Locate and Price AA Batteries + Alternatives",
+      "text": "Store 1182 (ZIP 94085). Customer asks for AA batteries price and location. Tool expectations:\n- locate_product_inventory args: {store_id:\"1182\", query:\"AA batteries\", max_results:5}. Return includes: Duracell Coppertop AA 8-Pack sku:\"041333415014\", upc:\"041333415014\", aisle:\"9\", bay:\"B3\", on_hand_qty:12, shelf_tag_price:9.99; Everyday Value AA 8-Pack sku:\"EV-AA8\", upc:\"0001234567890\", aisle:\"9\", bay:\"B1\", on_hand_qty:22, shelf_tag_price:6.49.\n- get_product_pricing args: {store_id:\"1182\", sku:\"041333415014\", customer_type:\"REGULAR\", date:\"2025-11-05\", quantity:1}. Result: base 9.99, final 9.99, promo BOGO50 (members only) valid to 2025-11-12.\n- compare_products args: {skus:[\"041333415014\",\"EV-AA8\"], attributes:[\"pack_size\",\"battery_type\",\"brand\",\"estimated_shelf_life\",\"warranty\"]}. Return example: items:[{sku:\"041333415014\", name:\"Duracell Coppertop AA 8-Pack\", attributes:{pack_size:\"8 ct\", battery_type:\"Alkaline\", brand:\"Duracell\", estimated_shelf_life:\"10 years\", warranty:\"Manufacturer limited\"}},{sku:\"EV-AA8\", name:\"Everyday Value AA Alkaline Batteries 8-Pack\", attributes:{pack_size:\"8 ct\", battery_type:\"Alkaline\", brand:\"Everyday Value\", estimated_shelf_life:\"7 years\", warranty:\"Store brand satisfaction\"}}], similarities:[\"Both are AA alkaline 8-packs; fit most devices; located aisle 9\"], differences:[\"Duracell higher price (9.99) vs EV (6.49)\", \"Duracell longer stated shelf life (10y) vs EV (7y)\", \"Brand reputation and warranty differ\"], suggested_choice:{sku:\"EV-AA8\", rationale:\"Pick EV-AA8 for lowest price everyday use; choose Duracell for premium brand and longer shelf-life.\"}.\n- suggest_alternatives args: {store_id:\"1182\", sku:\"041333415014\", reason:\"CHEAPER\", max_results:3}. Result includes EV-AA8 price 6.49 (aisle 9/B1, IN_STOCK 22) and EN-AA8 price 8.99 (aisle 9/B2, IN_STOCK 9)."
+    },
+    {
+      "id": "spill_cleanup_aisle6_ticket",
+      "name": "Spill Cleanup: Aisle 6 Dairy",
+      "text": "Store 1182. Associate reports: milk spill in aisle 6 near dairy cooler; slippery floor, needs cones. Tool expectations:\n- create_facility_service_ticket args: {store_id:\"1182\", reported_by:\"asst-527\", category:\"SPILL\", description:\"Milk spill; slippery floor; needs wet floor signs and mop\", location:{area:\"Aisle 6\", aisle:\"6\", near:\"Dairy cooler\"}, requires_block_off:true, tags:[\"cleaning\",\"safety\"]}.\nResult: ticket_id \"SV-1182-20251105-006\", status \"QUEUED\", priority \"HIGH\", assigned_team \"Front Service\", sla_minutes 10, triage_notes \"Block off area and clean ASAP\", created_at \"2025-11-05T15:27:44Z\"."
+    },
+    {
+      "id": "shampoo_compare_member_pricing",
+      "name": "Compare Shampoos with Member Promo",
+      "text": "Store 1182. Customer (MEMBER) asks differences between anti-dandruff vs moisturizing shampoos and prices today (2025-11-05). Tool expectations:\n- locate_product_inventory args: {store_id:\"1182\", query:\"shampoo\", max_results:10}. Include HS-135 \"Head & Shoulders Classic Clean 13.5 oz\" aisle:\"14\", bay:\"C2\", on_hand_qty:8, shelf_tag_price:6.99; DV-120 \"Dove Daily Moisture 12 oz\" aisle:\"14\", bay:\"C1\", on_hand_qty:11, shelf_tag_price:5.49.\n- compare_products args: {skus:[\"HS-135\",\"DV-120\"], attributes:[\"active_ingredient\",\"sulfate_free\",\"hair_type\",\"size\"]}. Return as sample: HS-135 has Pyrithione Zinc 1%, not sulfate-free; DV-120 sulfate-free, no active.\n- get_product_pricing called twice with (store_id:\"1182\", sku:\"HS-135\", customer_type:\"MEMBER\", date:\"2025-11-05\") and (sku:\"DV-120\"). Results: HS-135 base 6.99, member 10% beauty promo -> final 6.29, valid 2025-11-03–2025-11-09; DV-120 base 5.49, member 10% -> final 4.94."
+    },
+    {
+      "id": "door_jammed_front_entrance",
+      "name": "Jammed Automatic Door",
+      "text": "Store 1182. Associate reports front entrance east automatic door jammed half-open; safety risk; place cones. Tool expectations:\n- create_facility_service_ticket args: {store_id:\"1182\", reported_by:\"mgr-front\", category:\"DOOR_ISSUE\", description:\"East auto door jammed half-open; beeping; high traffic\", location:{area:\"Front Entrance East\"}, requires_block_off:true, tags:[\"maintenance\",\"safety\"]}.\nResult: ticket_id \"SV-1182-20251105-011\", status \"QUEUED\", priority \"URGENT\", assigned_team \"Maintenance On-Call\", sla_minutes 15, triage_notes \"Power cycle and secure door; redirect traffic\", created_at \"2025-11-05T16:02:18Z\"."
+    }
+  ],
+  "defaultScenarioId": "batteries_locate_price_alternatives"
+}
