@@ -1,14 +1,13 @@
 "use client";
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from './ui';
+import ConfigVoiceAgent from './config-voice-agent';
 
 interface ConfigSummary { id:string; name:string; description:string }
 interface ToolSpec { name:string; description:string; argSchema:any; resultSchema:any; sampleResult?:any }
 interface ActiveConfig extends ConfigSummary { prompt:string; scenarios:any[]; tools?:ToolSpec[]; defaultScenarioId?:string }
 
 export default function ConfigManager() {
-  const router = useRouter();
   const [configs, setConfigs] = useState<ConfigSummary[]>([]);
   const [active, setActive] = useState<ActiveConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -21,20 +20,21 @@ export default function ConfigManager() {
   const [refineText, setRefineText] = useState<string>('');
   const [refineBusy, setRefineBusy] = useState<boolean>(false);
   const [refineError, setRefineError] = useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState<boolean>(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/config').then(r=> r.json());
       setConfigs(r.configs||[]);
-  setActive(r.active||null);
-  setPreviewJson(r.active ? JSON.stringify(r.active, null, 2) : '');
+      setActive(r.active||null);
+      setPreviewJson(r.active ? JSON.stringify(r.active, null, 2) : '');
     } catch (e:any) {
       console.warn(e);
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(()=> { load(); }, []);
+  useEffect(()=> { load(); }, [load]);
 
   const activate = async (id:string) => {
     setLoading(true);
@@ -128,6 +128,7 @@ export default function ConfigManager() {
               <button disabled={loading} onClick={load} className="text-[10px] text-cyan-400 hover:text-cyan-200">Refresh</button>
               <button onClick={()=> setShowRaw(r => !r)} className="text-[10px] text-neutral-400 hover:text-neutral-200">{showRaw? 'Hide Raw' : 'Show Raw JSON'}</button>
               <button onClick={()=> setRefineOpen(o=> !o)} className="text-[10px] text-cyan-500 hover:text-cyan-300">{refineOpen? 'Cancel Refine':'Refine Config'}</button>
+              <button onClick={()=> setVoiceOpen(v => !v)} className="text-[10px] text-cyan-300 hover:text-cyan-100 whitespace-nowrap">{voiceOpen? 'Hide Voice Agent':'Chat with voice about your agent'}</button>
             </div>
           </div>
           {refineOpen && (
@@ -141,6 +142,13 @@ export default function ConfigManager() {
                 {refineBusy && <div className="text-[10px] text-cyan-300 animate-pulse">LLM updating...</div>}
               </div>
             </div>
+          )}
+          {voiceOpen && (
+            <ConfigVoiceAgent
+              activeConfigName={active?.name}
+              onConfigMutated={load}
+              onClose={()=> setVoiceOpen(false)}
+            />
           )}
           {!active && <div className="text-[11px] text-neutral-500">No active config.</div>}
           {active && (

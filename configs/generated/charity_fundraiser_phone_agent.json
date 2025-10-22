@@ -1,0 +1,461 @@
+{
+  "id": "charity_fundraiser_phone_agent",
+  "name": "Charity Fundraiser Phone Agent",
+  "description": "Assist callers to make one-time or recurring donations to listed charities, manage pledges, validate payment, and issue receipts.",
+  "prompt": "You are a phone agent for charity fundraising. Do not fabricate donor or payment details; use tool outputs for facts. Always confirm donation amount, recipient charity (by name and campaign ID), donation frequency (one-time vs monthly/annual), and payment method before charging. Ask concise clarifying questions when required. Never initiate a charge without explicit donor consent. Respect privacy: do not repeat full card numbers or sensitive personal data; display only last 4 digits. Provide clear tax-receipt language and next steps. Keep replies brief, courteous, and actionable. Default to English.",
+  "tools": [
+    {
+      "name": "list_charities",
+      "description": "Return available charities and active campaigns for donations in a given ZIP code or nationwide.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "zip_code": {
+            "type": "string",
+            "description": "5-digit ZIP code or empty for nationwide"
+          },
+          "include_inactive": {
+            "type": "boolean",
+            "description": "Whether to include inactive campaigns"
+          }
+        },
+        "required": [
+          "zip_code"
+        ]
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "charities",
+          "timestamp"
+        ],
+        "properties": {
+          "charities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "charity_id",
+                "name",
+                "campaigns"
+              ],
+              "properties": {
+                "charity_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "mission_tagline": {
+                  "type": "string"
+                },
+                "distance_miles": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "campaigns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "campaign_id",
+                      "title",
+                      "active",
+                      "suggested_amounts"
+                    ],
+                    "properties": {
+                      "campaign_id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "active": {
+                        "type": "boolean"
+                      },
+                      "suggested_amounts": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      },
+                      "goal_amount": {
+                        "type": "number"
+                      },
+                      "raised_to_date": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "sampleResult": {
+        "charities": [
+          {
+            "charity_id": "C2001",
+            "name": "Community Food Network",
+            "mission_tagline": "Emergency food and nutrition programs",
+            "distance_miles": 2.4,
+            "campaigns": [
+              {
+                "campaign_id": "C2001-KIT2025",
+                "title": "Summer Meal Kits 2025",
+                "active": true,
+                "suggested_amounts": [
+                  25,
+                  50,
+                  100
+                ],
+                "goal_amount": 50000,
+                "raised_to_date": 31200
+              },
+              {
+                "campaign_id": "C2001-GEN",
+                "title": "General Support",
+                "active": true,
+                "suggested_amounts": [
+                  10,
+                  25,
+                  50
+                ],
+                "goal_amount": 200000,
+                "raised_to_date": 125000
+              }
+            ]
+          },
+          {
+            "charity_id": "C3005",
+            "name": "Young Scholars Foundation",
+            "mission_tagline": "Scholarships and mentorship for underserved students",
+            "distance_miles": 12.1,
+            "campaigns": [
+              {
+                "campaign_id": "C3005-SCHOLAR22",
+                "title": "2025 Scholarship Drive",
+                "active": true,
+                "suggested_amounts": [
+                  100,
+                  250,
+                  500
+                ],
+                "goal_amount": 75000,
+                "raised_to_date": 41000
+              }
+            ]
+          }
+        ],
+        "timestamp": "2025-10-01T14:12:00Z"
+      }
+    },
+    {
+      "name": "validate_payment_method",
+      "description": "Validate a provided payment method (card or ACH token) and return masked info and a temporary token for charges.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "payment_type",
+          "payment_details"
+        ],
+        "properties": {
+          "payment_type": {
+            "type": "string",
+            "enum": [
+              "card",
+              "ach"
+            ]
+          },
+          "payment_details": {
+            "type": "object",
+            "description": "For card: card_number, exp_month, exp_year, cvv, billing_zip. For ach: account_last4, routing_number_last4, account_type",
+            "properties": {
+              "card_number": {
+                "type": "string"
+              },
+              "exp_month": {
+                "type": "integer"
+              },
+              "exp_year": {
+                "type": "integer"
+              },
+              "cvv": {
+                "type": "string"
+              },
+              "billing_zip": {
+                "type": "string"
+              },
+              "account_last4": {
+                "type": "string"
+              },
+              "routing_number_last4": {
+                "type": "string"
+              },
+              "account_type": {
+                "type": "string",
+                "enum": [
+                  "checking",
+                  "savings"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "valid",
+          "masked",
+          "token",
+          "card_type",
+          "reason"
+        ],
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "masked": {
+            "type": "string",
+            "description": "Mask showing last 4 digits (e.g., **** **** **** 1234 or ACH ****1234)"
+          },
+          "token": {
+            "type": "string",
+            "description": "Temporary payment token to be used for charging"
+          },
+          "card_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "If invalid, short explanation"
+          }
+        }
+      },
+      "sampleResult": {
+        "valid": true,
+        "masked": "**** **** **** 4242",
+        "token": "paytok_card_7f3a9b",
+        "card_type": "Visa",
+        "reason": ""
+      }
+    },
+    {
+      "name": "create_donation",
+      "description": "Create a donation intent (reserve) including donor details, charity campaign, amount, frequency, and payment token. Returns donation_id and pre-authorization status.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "donor_name",
+          "donor_email",
+          "charity_id",
+          "campaign_id",
+          "amount",
+          "frequency",
+          "payment_token",
+          "consent_to_charge"
+        ],
+        "properties": {
+          "donor_name": {
+            "type": "string"
+          },
+          "donor_email": {
+            "type": "string"
+          },
+          "charity_id": {
+            "type": "string"
+          },
+          "campaign_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 1
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "one-time",
+              "monthly",
+              "annual"
+            ]
+          },
+          "payment_token": {
+            "type": "string"
+          },
+          "consent_to_charge": {
+            "type": "boolean",
+            "description": "Explicit donor consent to charge now (true) or to only schedule/pledge (false)"
+          },
+          "donation_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Preferred charge date (YYYY-MM-DD). Optional for immediate charges."
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "donation_id",
+          "status",
+          "charged_amount",
+          "scheduled_charge_date",
+          "receipt_expected"
+        ],
+        "properties": {
+          "donation_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "authorized",
+              "scheduled",
+              "pledged",
+              "failed"
+            ]
+          },
+          "charged_amount": {
+            "type": "number"
+          },
+          "scheduled_charge_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "receipt_expected": {
+            "type": "boolean"
+          },
+          "failure_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "sampleResult": {
+        "donation_id": "D-20251009-8841",
+        "status": "authorized",
+        "charged_amount": 50,
+        "scheduled_charge_date": null,
+        "receipt_expected": true,
+        "failure_reason": null
+      }
+    },
+    {
+      "name": "get_receipt",
+      "description": "Retrieve a tax receipt PDF link and summary for a completed donation by donation_id.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "donation_id"
+        ],
+        "properties": {
+          "donation_id": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "donation_id",
+          "charity_id",
+          "charity_name",
+          "amount",
+          "date",
+          "receipt_url"
+        ],
+        "properties": {
+          "donation_id": {
+            "type": "string"
+          },
+          "charity_id": {
+            "type": "string"
+          },
+          "charity_name": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "receipt_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "tax_deductible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sampleResult": {
+        "donation_id": "D-20251009-8841",
+        "charity_id": "C2001",
+        "charity_name": "Community Food Network",
+        "amount": 50,
+        "date": "2025-10-09T15:05:00Z",
+        "receipt_url": "https://payments.example.org/receipts/D-20251009-8841.pdf",
+        "tax_deductible": true
+      }
+    },
+    {
+      "name": "noop",
+      "description": "No-op tool used only to persist scenario/context. Returns a simple acknowledgement.",
+      "argSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "sampleResult": {
+        "ok": true
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "one_time_local_food_donation",
+      "name": "One-time donation to local food campaign (card)",
+      "text": "Donor: Maria Lopez (donor_id DNR1007) Phone verified. ZIP 30310. Wants to donate one-time $50 to Community Food Network Summer Meal Kits campaign.\nCharity: Community Food Network (charity_id C2001) Campaign: Summer Meal Kits 2025 (campaign_id C2001-KIT2025). Suggested amounts include 25, 50, 100. Donor selects $50.\nPayment: Card provided, Visa ending 4242, exp 12/2026, billing zip 30310. validate_payment_method returns valid=true, masked='**** **** **** 4242', token='paytok_card_7f3a9b', card_type='Visa'.\nConsent: Donor verbally consents to immediate charge.\ncreate_donation call: donor_name='Maria Lopez', donor_email='maria.lopez@example.com', charity_id='C2001', campaign_id='C2001-KIT2025', amount=50.00, frequency='one-time', payment_token='paytok_card_7f3a9b', consent_to_charge=true.\nExpected create_donation result: donation_id 'D-20251009-8841', status 'authorized', charged_amount 50.00, scheduled_charge_date null, receipt_expected true.\nget_receipt for donation_id D-20251009-8841 returns URL https://payments.example.org/receipts/D-20251009-8841.pdf, tax_deductible true, date 2025-10-09T15:05:00Z.\nOperational notes: Provide confirmation message with masked card, donation amount, receipt availability, and tax-deductible statement. Do not read full card number or CVV back."
+    },
+    {
+      "id": "monthly_scholarship_recurring_ach",
+      "name": "Monthly recurring scholarship donation via ACH (pledge then validate)",
+      "text": "Donor: Aaron Patel (donor_id DNR221) ZIP 94105. Wants to start a recurring monthly pledge of $100 to Young Scholars Foundation 2025 Scholarship Drive.\nCharity: Young Scholars Foundation (charity_id C3005) Campaign: 2025 Scholarship Drive (campaign_id C3005-SCHOLAR22). Suggested amounts: 100, 250, 500. Donor picks $100 monthly starting 2025-11-01.\nPayment: ACH details provided: account_last4 '6789', routing_number_last4 '4321', account_type 'checking'. validate_payment_method called with payment_type 'ach' and payment_details returns valid=true, masked='ACH ****6789', token 'paytok_ach_a12b3c', card_type null.\nDonor agrees to schedule first charge on 2025-11-01 and consents to recurring charges.\ncreate_donation called with donor_name='Aaron Patel', donor_email='aaron.patel@example.com', charity_id='C3005', campaign_id='C3005-SCHOLAR22', amount=100, frequency='monthly', payment_token='paytok_ach_a12b3c', consent_to_charge=true, donation_date='2025-11-01'.\nExpected create_donation result: donation_id 'D-20251101-1100', status 'scheduled', charged_amount 0.0, scheduled_charge_date '2025-11-01', receipt_expected true.\nOperational notes: Confirm schedule, masked ACH info, first charge date, and that a receipt will be issued after first successful charge. Offer donor ability to change amount or cancel before 2025-11-01."
+    },
+    {
+      "id": "pledge_phone_pledge_no_payment",
+      "name": "Phone pledge without immediate payment (pledge for capital campaign)",
+      "text": "Donor: Evelyn Carter (donor_id DNR332) ZIP 07030. Interested in making a $5,000 pledge to Regional Health Access Capital Campaign but not ready to provide payment now. Charity: Regional Health Access (charity_id C4100) Campaign: Capital Expansion (campaign_id C4100-CAPEX25). Donor requests a pledge record and follow-up call/email in 30 days. create_donation is invoked with donor_name='Evelyn Carter', donor_email='evelyn.carter@example.com', charity_id='C4100', campaign_id='C4100-CAPEX25', amount=5000, frequency='one-time', payment_token='', consent_to_charge=false.\nExpected create_donation result: donation_id 'PLEDGE-20251009-5000', status 'pledged', charged_amount 0.0, scheduled_charge_date null, receipt_expected false.\nOperational notes: Record pledge ID, confirm follow-up timeline and contact info, do not request card details, and provide pledge summary to donor (amount, campaign, pledge id)."
+    }
+  ],
+  "defaultScenarioId": "one_time_local_food_donation"
+}
