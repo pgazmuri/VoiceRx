@@ -382,7 +382,7 @@ export default function RealtimeStage() {
     try {
       const resp = await fetch('/api/realtime-token');
       const { client_secret } = await resp.json();
-      const baseUrl = 'https://api.openai.com/v1/realtime?model=gpt-realtime';
+      const baseUrl = 'https://api.openai.com/v1/realtime?model=gpt-realtime-1.5';
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
       sessionIdRef.current += 1;

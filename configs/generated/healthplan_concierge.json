@@ -1,0 +1,623 @@
+{
+  "id": "healthplan_concierge",
+  "name": "Health Plan Concierge Phone",
+  "description": "Voice/text concierge for health plan members to find providers, check availability, schedule appointments (with optional member authentication), and arrange transportation to appointments. Always prioritize in-network options first and escalate to human agents when required.",
+  "prompt": "You are a health plan concierge assistant. Be concise, empathetic, and prioritize in-network providers before showing out-of-network alternatives. Do not fabricate member or scheduling facts — rely only on explicit user inputs and tool outputs. Ask a single concise clarifying question when required. Only request or perform member authentication when the member requests scheduling or transport that requires authenticated booking. Do not provide clinical advice beyond directing members to appropriate care levels (e.g., urgent care, ER) and recommend contacting emergency services in life-threatening situations. Always confirm date/time, provider, location, and whether member wants transportation before finalizing an appointment. Use tools only when they provide necessary facts. Keep responses short (one to four sentences) and default to English.",
+  "tools": [
+    {
+      "name": "noop",
+      "description": "No-op tool used to persist scenario/context. Returns a simple acknowledgement.",
+      "argSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "sampleResult": {
+        "ok": true
+      }
+    },
+    {
+      "name": "verify_member_identity",
+      "description": "Authenticate a member using member_id and PIN (or DOB depending on plan) and return verification status and member metadata. Authentication is required before schedule_appointment or arrange_transport_call will succeed.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "member_id",
+          "auth_type",
+          "auth_value"
+        ],
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "description": "Member identifier (e.g., M######)"
+          },
+          "auth_type": {
+            "type": "string",
+            "enum": [
+              "PIN",
+              "DOB"
+            ],
+            "description": "Authentication method"
+          },
+          "auth_value": {
+            "type": "string",
+            "description": "PIN code or DOB (YYYY-MM-DD)"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "verified",
+          "authenticated",
+          "member_id",
+          "member_name",
+          "needs_mfa"
+        ],
+        "properties": {
+          "verified": {
+            "type": "boolean"
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "member_name": {
+            "type": "string"
+          },
+          "needs_mfa": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "verified": true,
+        "authenticated": true,
+        "member_id": "M200111",
+        "member_name": "Aisha Rahman",
+        "needs_mfa": false,
+        "reason": "PIN match"
+      }
+    },
+    {
+      "name": "provider_lookup",
+      "description": "Search for providers by specialty, condition, or provider name and return prioritized in-network results first, then out-of-network matches.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "query",
+          "zip_code",
+          "radius_miles"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Specialty (e.g., 'primary care', 'cardiologist'), condition or provider name"
+          },
+          "zip_code": {
+            "type": "string"
+          },
+          "radius_miles": {
+            "type": "integer"
+          },
+          "accepts_new_patients": {
+            "type": "boolean",
+            "description": "If true, filter for providers accepting new patients"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "in_network",
+          "out_of_network",
+          "query",
+          "zip_code"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "zip_code": {
+            "type": "string"
+          },
+          "in_network": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider_id",
+                "name",
+                "specialty",
+                "address",
+                "phone",
+                "distance_miles",
+                "accepts_new_patients",
+                "network_status"
+              ],
+              "properties": {
+                "provider_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "specialty": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "distance_miles": {
+                  "type": "number"
+                },
+                "accepts_new_patients": {
+                  "type": "boolean"
+                },
+                "network_status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_NETWORK",
+                    "IN_NETWORK_LIMITED"
+                  ]
+                },
+                "taxonomies": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "out_of_network": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider_id",
+                "name",
+                "specialty",
+                "address",
+                "phone",
+                "distance_miles",
+                "network_status"
+              ],
+              "properties": {
+                "provider_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "specialty": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "distance_miles": {
+                  "type": "number"
+                },
+                "network_status": {
+                  "type": "string",
+                  "enum": [
+                    "OUT_OF_NETWORK"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "query": "primary care",
+        "zip_code": "94107",
+        "in_network": [
+          {
+            "provider_id": "P-9001",
+            "name": "Oak Street Health - SOMA",
+            "specialty": "Primary Care",
+            "address": "100 Townsend St, San Francisco, CA 94107",
+            "phone": "415-555-0101",
+            "distance_miles": 0.8,
+            "accepts_new_patients": true,
+            "network_status": "IN_NETWORK",
+            "taxonomies": [
+              "Internal Medicine",
+              "Geriatrics"
+            ]
+          },
+          {
+            "provider_id": "P-9002",
+            "name": "Mission Family Health Center",
+            "specialty": "Primary Care",
+            "address": "220 16th St, San Francisco, CA 94103",
+            "phone": "415-555-0199",
+            "distance_miles": 1.6,
+            "accepts_new_patients": false,
+            "network_status": "IN_NETWORK_LIMITED",
+            "taxonomies": [
+              "Family Medicine"
+            ]
+          }
+        ],
+        "out_of_network": [
+          {
+            "provider_id": "P-OUT-77",
+            "name": "Bayview Community Clinic",
+            "specialty": "Primary Care",
+            "address": "800 Third St, San Francisco, CA 94107",
+            "phone": "415-555-0777",
+            "distance_miles": 2.9,
+            "network_status": "OUT_OF_NETWORK"
+          }
+        ]
+      }
+    },
+    {
+      "name": "availability_lookup",
+      "description": "Return appointment availability for a provider (by provider_id) or for a specialty near a location. Availability includes appointment types, dates, times, and whether telehealth is an option.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "search_type",
+          "zip_code"
+        ],
+        "properties": {
+          "search_type": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "specialty"
+            ]
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "specialty": {
+            "type": "string"
+          },
+          "zip_code": {
+            "type": "string"
+          },
+          "date_from": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "appointment_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "e.g., ['new patient','follow-up','telehealth']"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "search_type",
+          "zip_code",
+          "slots"
+        ],
+        "properties": {
+          "search_type": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "specialty": {
+            "type": "string"
+          },
+          "zip_code": {
+            "type": "string"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider_id",
+                "provider_name",
+                "appointment_type",
+                "start",
+                "end",
+                "is_telehealth",
+                "slot_id"
+              ],
+              "properties": {
+                "provider_id": {
+                  "type": "string"
+                },
+                "provider_name": {
+                  "type": "string"
+                },
+                "appointment_type": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "string",
+                  "description": "ISO8601 date-time"
+                },
+                "end": {
+                  "type": "string",
+                  "description": "ISO8601 date-time"
+                },
+                "is_telehealth": {
+                  "type": "boolean"
+                },
+                "slot_id": {
+                  "type": "string"
+                },
+                "location_id": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "search_type": "provider",
+        "provider_id": "P-9001",
+        "zip_code": "94107",
+        "slots": [
+          {
+            "provider_id": "P-9001",
+            "provider_name": "Oak Street Health - SOMA",
+            "appointment_type": "new patient",
+            "start": "2025-11-12T09:00:00-08:00",
+            "end": "2025-11-12T09:30:00-08:00",
+            "is_telehealth": false,
+            "slot_id": "SLOT-9001-20251112-0900",
+            "location_id": "LOC-OS-001"
+          },
+          {
+            "provider_id": "P-9001",
+            "provider_name": "Oak Street Health - SOMA",
+            "appointment_type": "telehealth",
+            "start": "2025-11-12T14:00:00-08:00",
+            "end": "2025-11-12T14:20:00-08:00",
+            "is_telehealth": true,
+            "slot_id": "SLOT-9001-20251112-1400",
+            "location_id": "VIRTUAL"
+          }
+        ]
+      }
+    },
+    {
+      "name": "schedule_appointment",
+      "description": "Schedule an appointment using an authenticated member session. Requires slot_id, provider_id, member_id, and reason. Returns confirmation with appointment_id and details.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "member_id",
+          "slot_id",
+          "provider_id",
+          "appointment_type",
+          "reason",
+          "authenticated"
+        ],
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "slot_id": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "appointment_type": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "authenticated": {
+            "type": "boolean",
+            "description": "Must be true; indicates verify_member_identity succeeded"
+          },
+          "transport_requested": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "success",
+          "appointment_id",
+          "member_id",
+          "provider_id",
+          "slot_id",
+          "start",
+          "end",
+          "location"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "appointment_id": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "slot_id": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "cancellation_policy": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "success": true,
+        "appointment_id": "APT-20251112-7001",
+        "member_id": "M200111",
+        "provider_id": "P-9001",
+        "slot_id": "SLOT-9001-20251112-0900",
+        "start": "2025-11-12T09:00:00-08:00",
+        "end": "2025-11-12T09:30:00-08:00",
+        "location": "Oak Street Health - SOMA, 100 Townsend St, San Francisco, CA 94107",
+        "notes": "New patient visit—bring ID and list of medications.",
+        "cancellation_policy": "Cancel 24 hours in advance to avoid no-show fee."
+      }
+    },
+    {
+      "name": "arrange_transport_call",
+      "description": "Call the transportation center to request a ride. Requires authenticated member_id, appointment time slot, and destination location. Pickup address is resolved from member profile. Returns ride confirmation details including pickup window and ride ID.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "member_id",
+          "appointment_start",
+          "destination_address",
+          "authenticated"
+        ],
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "appointment_start": {
+            "type": "string",
+            "description": "ISO8601 appointment datetime"
+          },
+          "destination_address": {
+            "type": "string"
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "mobility_assistance": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "WHEELCHAIR",
+              "WALKER",
+              "ASSISTANCE_IN_OUT"
+            ]
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ride_confirmed",
+          "ride_id",
+          "pickup_address",
+          "pickup_window_start",
+          "pickup_window_end",
+          "vehicle_type",
+          "provider"
+        ],
+        "properties": {
+          "ride_confirmed": {
+            "type": "boolean"
+          },
+          "ride_id": {
+            "type": "string"
+          },
+          "pickup_address": {
+            "type": "string"
+          },
+          "pickup_window_start": {
+            "type": "string"
+          },
+          "pickup_window_end": {
+            "type": "string"
+          },
+          "vehicle_type": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "sampleResult": {
+        "ride_confirmed": true,
+        "ride_id": "RIDE-77001",
+        "pickup_address": "2213 Market St, Apt 4B, San Francisco, CA 94114",
+        "pickup_window_start": "2025-11-12T08:15:00-08:00",
+        "pickup_window_end": "2025-11-12T08:35:00-08:00",
+        "vehicle_type": "Sedan",
+        "provider": "CityHealth Transit",
+        "notes": "Driver will assist to door; member uses cane."
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "routine_visit_transport",
+      "name": "Schedule new primary care visit with transportation",
+      "text": "Member: Aisha Rahman (member_id M200111) Age 62 Female ZIP 94107. Conditions: Type 2 Diabetes, Osteoarthritis. Mobility: uses cane at home. Preferred language: English. Pickup address on file: 2213 Market St, Apt 4B, San Francisco, CA 94114. Wants: new patient primary care visit within 2 weeks and needs transportation assistance (wheelchair not required, assistance to door). Provider search: 'primary care' near 94107. Provider selected: Oak Street Health - SOMA (provider_id P-9001). Availability: SLOT-9001-20251112-0900 (2025-11-12T09:00-09:30 local) and SLOT-9001-20251112-1400 telehealth. Member prefers in-person morning slot. Authentication: will provide PIN when asked (PIN 4820). After scheduling, transport should be arranged for pickup window 08:15-08:35. Expected schedule_appointment result: appointment_id APT-20251112-7001 with location 'Oak Street Health - SOMA, 100 Townsend St, San Francisco, CA 94107'. Expected arrange_transport_call result: ride_id RIDE-77001, pickup_window_start 2025-11-12T08:15:00-08:00, pickup_window_end 2025-11-12T08:35:00-08:00, provider 'CityHealth Transit', vehicle_type 'Sedan'."
+    },
+    {
+      "id": "specialist_oon_options",
+      "name": "Search cardiologist, show in-network first then out-of-network",
+      "text": "Member: Carlos Mendez (member_id M305900) Age 54 Male ZIP 33131. Condition: Elevated LDL and family history of CAD; requests 'cardiologist' near 33131 and asks if his cardiologist Dr. Elena Vargas (provider name provided) is in-network. Known providers: In-network: 'Sunrise Cardiology Clinic' (provider_id P-4100) address 120 Biscayne Blvd (distance 1.2 miles) accepts new patients false. Out-of-network: 'Vargas Cardiology' (provider_id P-OUT-410) address 45 Coral Way (distance 2.8 miles). Member prefers in-network; asks for earliest available follow-up (appointment_type 'follow-up'). Availability for P-4100: next slot SLOT-4100-20251202-10:00 at 2025-12-02T10:00-11:00. No availability for Dr. Vargas in-network. Expected provider_lookup returns P-4100 in in_network and P-OUT-410 in out_of_network. availability_lookup with specialty 'cardiologist' near 33131 should include SLOT-4100-20251202-1000. Member does NOT request scheduling in this call—no authentication performed."
+    },
+    {
+      "id": "same_week_urgent_followup",
+      "name": "Find same-week urgent appointment and schedule (authentication required)",
+      "text": "Member: Theresa Cole (member_id M410222) Age 39 Female ZIP 02114. Issue: Worsening asthma, requests same-week urgent follow-up with pulmonology. Member has a preferred in-network specialist 'North End Pulmonary' (provider_id P-NE-210) with availability SLOT-NE-20251028-1300 (2025-10-28T13:00-13:30) and another earlier slot SLOT-NE-20251027-1530 (2025-10-27T15:30-16:00). Member chooses earliest available slot on 2025-10-27 at 15:30. Authentication method allowed: DOB 1986-04-03. Member will authenticate with DOB for booking. After scheduling, member declines transportation. Expected schedule_appointment result: appointment_id APT-20251027-2102, start 2025-10-27T15:30:00-04:00, location 'North End Pulmonary, 300 Hanover St, Boston, MA 02114'."
+    },
+    {
+      "id": "telehealth_and_no_new_patients",
+      "name": "Telehealth option when local in-network isn't accepting new patients",
+      "text": "Member: Jamal Brown (member_id M550018) Age 29 Male ZIP 60616. Needs a new patient visit for mental health (therapy). Local in-network clinic 'Bronze Mind Therapy' (provider_id P-BM-01) is IN_NETWORK but accepts_new_patients false. Nearby in-network telehealth providers exist: 'TeleTherapy Network' (provider_id P-TT-09) telehealth slot SLOT-TT-20251115-1700 (2025-11-15T17:00-17:50). Member asks for next available telehealth new patient appointment and whether in-person is possible; member does not want to authenticate or schedule right now. Expected provider_lookup returns P-BM-01 (accepts_new_patients false) and P-TT-09 as in_network telehealth. availability_lookup for specialty 'therapy' near 60616 returns SLOT-TT-20251115-1700 marked is_telehealth true."
+    }
+  ],
+  "defaultScenarioId": "routine_visit_transport"
+}

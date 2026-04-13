@@ -1,0 +1,604 @@
+{
+  "id": "advent_health_exec_assistant",
+  "name": "Advent Health Executive Data Voice Agent",
+  "description": "Voice/text assistant for Advent Health executives (CIO, CMO, CFO, Chief Clinical Officers) to query hospital operations and financial data quickly — e.g., readmission rates, bed capacity, staffing, revenue, AR aging, and patient cohort summaries for targeted interventions. Prioritize accuracy, brevity, and privacy-compliant responses backed only by tool outputs.",
+  "prompt": "You are an Advent Health executive data assistant. Be concise, factual, and avoid speculation. Never fabricate data — only report information returned from tools. If a requested metric or timeframe is ambiguous, ask one concise clarifying question. Always respect patient privacy and PHI rules: do not reveal full patient identifiers or sensitive details unless the user is explicitly authorized (assume voice session is executive-level authorized only for aggregated and de-identified cohort outputs). Use tools only when needed. Keep replies short (1–4 sentences), include the key metric value, trend (up/down/flat) vs prior period when available, and next recommended action if metric is outside target thresholds. Respond in English.",
+  "tools": [
+    {
+      "name": "noop",
+      "description": "No-op tool used to persist scenario/context. Returns a simple acknowledgement.",
+      "argSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "sampleResult": {
+        "ok": true
+      }
+    },
+    {
+      "name": "get_operational_metrics",
+      "description": "Retrieve operational KPIs (e.g., 30-day readmit rate, ED LOS, OR utilization) for one or more facilities over a specified date range. Returns metric values, prior-period comparison, and thresholds.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "metric_codes",
+          "facility_ids",
+          "start_date",
+          "end_date"
+        ],
+        "properties": {
+          "metric_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of metric codes (e.g., READMIT_30, ED_LOS_HRS, OR_UTIL)"
+          },
+          "facility_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Facility identifiers (e.g., AH-ORL-001)"
+          },
+          "start_date": {
+            "type": "string",
+            "description": "ISO date inclusive"
+          },
+          "end_date": {
+            "type": "string",
+            "description": "ISO date inclusive"
+          },
+          "group_by": {
+            "type": "string",
+            "enum": [
+              "facility",
+              "department",
+              "system"
+            ],
+            "description": "Aggregation dimension"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "metrics",
+          "start_date",
+          "end_date"
+        ],
+        "properties": {
+          "start_date": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "metric_code",
+                "dimension_id",
+                "value",
+                "unit",
+                "prior_value",
+                "threshold"
+              ],
+              "properties": {
+                "metric_code": {
+                  "type": "string"
+                },
+                "dimension_id": {
+                  "type": "string",
+                  "description": "Facility ID or department based on group_by"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "prior_value": {
+                  "type": "number"
+                },
+                "threshold": {
+                  "type": "object",
+                  "properties": {
+                    "target": {
+                      "type": "number"
+                    },
+                    "alert_if_above": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "start_date": "2025-07-01",
+        "end_date": "2025-09-30",
+        "metrics": [
+          {
+            "metric_code": "READMIT_30",
+            "dimension_id": "AH-ORL-001",
+            "value": 12.4,
+            "unit": "percent",
+            "prior_value": 11.2,
+            "threshold": {
+              "target": 10,
+              "alert_if_above": true
+            },
+            "note": "Cardiology service line focus"
+          },
+          {
+            "metric_code": "READMIT_30",
+            "dimension_id": "AH-NAP-002",
+            "value": 9.1,
+            "unit": "percent",
+            "prior_value": 9.6,
+            "threshold": {
+              "target": 10,
+              "alert_if_above": true
+            },
+            "note": "Within target"
+          },
+          {
+            "metric_code": "OR_UTIL",
+            "dimension_id": "AH-ORL-001",
+            "value": 78.5,
+            "unit": "percent",
+            "prior_value": 82,
+            "threshold": {
+              "target": 85,
+              "alert_if_above": false
+            },
+            "note": "Elective reprioritization impacted utilization"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_financial_report",
+      "description": "Return financial summaries (net revenue, operating margin, AR aging buckets) for specified business units, date ranges, and contract lines. Includes top-line P&L and a breakdown by product line or payor when requested.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "business_unit_ids",
+          "start_date",
+          "end_date",
+          "granularity"
+        ],
+        "properties": {
+          "business_unit_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "e.g., ['AH-WEST','AH-SYS']"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "MTD",
+              "QTD",
+              "YTD",
+              "monthly"
+            ]
+          },
+          "include_ar_aging": {
+            "type": "boolean"
+          },
+          "product_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "business_unit_id",
+          "start_date",
+          "end_date",
+          "net_revenue",
+          "operating_margin_percent"
+        ],
+        "properties": {
+          "business_unit_id": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "net_revenue": {
+            "type": "number"
+          },
+          "operating_margin_percent": {
+            "type": "number"
+          },
+          "ar_aging": {
+            "type": "object",
+            "properties": {
+              "0_30": {
+                "type": "number"
+              },
+              "31_60": {
+                "type": "number"
+              },
+              "61_90": {
+                "type": "number"
+              },
+              "91_plus": {
+                "type": "number"
+              }
+            }
+          },
+          "product_line_breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "product_code": {
+                  "type": "string"
+                },
+                "product_name": {
+                  "type": "string"
+                },
+                "revenue": {
+                  "type": "number"
+                },
+                "avg_contract_rate": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "business_unit_id": "AH-WEST",
+        "start_date": "2025-11-01",
+        "end_date": "2025-11-30",
+        "net_revenue": 14235000,
+        "operating_margin_percent": 6.2,
+        "ar_aging": {
+          "0_30": 4200000,
+          "31_60": 1850000,
+          "61_90": 890000,
+          "91_plus": 1270000
+        },
+        "product_line_breakdown": [
+          {
+            "product_code": "PROC-CH-001",
+            "product_name": "Cardiac Cath (DRG 231)",
+            "revenue": 2850000,
+            "avg_contract_rate": 11850
+          },
+          {
+            "product_code": "IP-COPD-002",
+            "product_name": "Inpatient COPD bundle",
+            "revenue": 1125000,
+            "avg_contract_rate": 7200
+          },
+          {
+            "product_code": "ED-OBS-01",
+            "product_name": "ED Observation",
+            "revenue": 920000,
+            "avg_contract_rate": 820
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_patient_cohort",
+      "description": "Return a de-identified patient cohort list and summary statistics for a query (e.g., COPD 30-day readmits) filtered by facility(s), date window, and inclusion criteria. Returns limited PHI (hashed MRN or pseudonym), counts, ZIP3, admission/discharge dates, and readmit counts.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "cohort_code",
+          "facility_ids",
+          "start_date",
+          "end_date"
+        ],
+        "properties": {
+          "cohort_code": {
+            "type": "string",
+            "description": "e.g., COPD_READMIT_30"
+          },
+          "facility_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "max_rows": {
+            "type": "integer",
+            "description": "Maximum number of patient records to return"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "cohort_code",
+          "total_count",
+          "records"
+        ],
+        "properties": {
+          "cohort_code": {
+            "type": "string"
+          },
+          "total_count": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "median_age": {
+                "type": "number"
+              },
+              "percent_female": {
+                "type": "number"
+              },
+              "common_zip3": {
+                "type": "string"
+              }
+            }
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "pseudo_mrn",
+                "age",
+                "sex",
+                "zip3",
+                "index_admission_date",
+                "readmit_count_30d",
+                "primary_drg"
+              ],
+              "properties": {
+                "pseudo_mrn": {
+                  "type": "string",
+                  "description": "Hashed or pseudonymized MRN"
+                },
+                "age": {
+                  "type": "integer"
+                },
+                "sex": {
+                  "type": "string"
+                },
+                "zip3": {
+                  "type": "string"
+                },
+                "index_admission_date": {
+                  "type": "string"
+                },
+                "discharge_date": {
+                  "type": "string"
+                },
+                "readmit_count_30d": {
+                  "type": "integer"
+                },
+                "primary_drg": {
+                  "type": "string"
+                },
+                "last_attending_dept": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "cohort_code": "COPD_READMIT_30",
+        "total_count": 42,
+        "summary": {
+          "median_age": 68,
+          "percent_female": 54.8,
+          "common_zip3": "327"
+        },
+        "records": [
+          {
+            "pseudo_mrn": "HX-7f3a9",
+            "age": 71,
+            "sex": "F",
+            "zip3": "327",
+            "index_admission_date": "2025-10-12",
+            "discharge_date": "2025-10-18",
+            "readmit_count_30d": 1,
+            "primary_drg": "DRG-190",
+            "last_attending_dept": "Pulmonary"
+          },
+          {
+            "pseudo_mrn": "HX-8c2d1",
+            "age": 64,
+            "sex": "M",
+            "zip3": "328",
+            "index_admission_date": "2025-09-29",
+            "discharge_date": "2025-10-02",
+            "readmit_count_30d": 2,
+            "primary_drg": "DRG-189",
+            "last_attending_dept": "Pulmonary"
+          },
+          {
+            "pseudo_mrn": "HX-5b6e4",
+            "age": 59,
+            "sex": "F",
+            "zip3": "327",
+            "index_admission_date": "2025-10-05",
+            "discharge_date": "2025-10-09",
+            "readmit_count_30d": 1,
+            "primary_drg": "DRG-190",
+            "last_attending_dept": "Hospital Medicine"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_bed_capacity_and_staffing",
+      "description": "Return current and historical bed capacity, staffed beds, occupancy %, and nursing FTE vs required by shift for specified facility or unit and date/time window.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "facility_id",
+          "unit_ids",
+          "as_of_datetime"
+        ],
+        "properties": {
+          "facility_id": {
+            "type": "string"
+          },
+          "unit_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "as_of_datetime": {
+            "type": "string",
+            "description": "ISO datetime for snapshot"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "facility_id",
+          "as_of_datetime",
+          "units"
+        ],
+        "properties": {
+          "facility_id": {
+            "type": "string"
+          },
+          "as_of_datetime": {
+            "type": "string"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "unit_id",
+                "bed_count",
+                "staffed_beds",
+                "occupancy_percent",
+                "nursing_fte_on_shift",
+                "nursing_fte_required"
+              ],
+              "properties": {
+                "unit_id": {
+                  "type": "string"
+                },
+                "bed_count": {
+                  "type": "integer"
+                },
+                "staffed_beds": {
+                  "type": "integer"
+                },
+                "occupancy_percent": {
+                  "type": "number"
+                },
+                "nursing_fte_on_shift": {
+                  "type": "number"
+                },
+                "nursing_fte_required": {
+                  "type": "number"
+                },
+                "shortfall": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "facility_id": "AH-ORL-001",
+        "as_of_datetime": "2025-12-05T07:00:00-05:00",
+        "units": [
+          {
+            "unit_id": "MedSurg-3A",
+            "bed_count": 28,
+            "staffed_beds": 26,
+            "occupancy_percent": 96.2,
+            "nursing_fte_on_shift": 9,
+            "nursing_fte_required": 11,
+            "shortfall": 2
+          },
+          {
+            "unit_id": "ICU-1",
+            "bed_count": 12,
+            "staffed_beds": 12,
+            "occupancy_percent": 100,
+            "nursing_fte_on_shift": 12.5,
+            "nursing_fte_required": 12,
+            "shortfall": 0
+          }
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "cardiology_readmit_q3",
+      "name": "Q3 Cardiology 30-day Readmit Review Across Three Facilities",
+      "text": "Stakeholder: CMO requests 30-day readmit rates for Cardiology (service line) across three facilities for Q3 2025 (2025-07-01 to 2025-09-30). Facilities: AH-ORL-001 (Orlando Regional), AH-NAP-002 (Naples General), AH-MEM-003 (Memorial South). Target threshold: 10% readmit_30. Expected tool call get_operational_metrics with metric_codes ['READMIT_30'], facility_ids ['AH-ORL-001','AH-NAP-002','AH-MEM-003'], start_date '2025-07-01', end_date '2025-09-30', group_by 'facility'. Expected results (consistent with tool sample): AH-ORL-001 = 12.4% (prior 11.2%), AH-NAP-002 = 9.1% (prior 9.6%), AH-MEM-003 = 10.8% (prior 10.0%). Recommended immediate action: investigate AH-ORL-001 cardiology discharge processes and care transitions; consider targeted follow-up calls within 7 days. Include facility names, facility IDs, metric values, and whether each is above the 10% threshold."
+    },
+    {
+      "id": "nov_mtd_financial_snapshot",
+      "name": "November MTD Finance Snapshot for AH-WEST",
+      "text": "Stakeholder: CFO requests Month-to-Date (MTD) financial summary for AH-WEST for November 2025 (2025-11-01 to 2025-11-30). Business unit: AH-WEST. Request includes net revenue, operating margin %, and AR aging buckets. Also ask for product-line breakdown for Cardiac Cath (PROC-CH-001), Inpatient COPD bundle (IP-COPD-002), and ED Observation (ED-OBS-01). Expected tool call get_financial_report with business_unit_ids ['AH-WEST'], start_date '2025-11-01', end_date '2025-11-30', granularity 'MTD', include_ar_aging true, product_lines ['PROC-CH-001','IP-COPD-002','ED-OBS-01']. Expected results (aligned to sample): net_revenue $14,235,000; operating_margin_percent 6.2%; AR aging 0-30: $4,200,000; 31-60: $1,850,000; 61-90: $890,000; 91+: $1,270,000. Product line revenues and avg contract rates included in response. Action: flag 31-60 bucket rising vs prior month and recommend AR focus on payor X contracts where denial rate exceeded 6%."
+    },
+    {
+      "id": "copd_readmit_cohort_intervention",
+      "name": "COPD 30-day Readmit Cohort for Targeted Outreach",
+      "text": "Stakeholder: Chief Clinical Officer requests a de-identified cohort of COPD patients with 30-day readmissions across facilities AH-ORL-001 and AH-NAP-002 for index admissions between 2025-09-01 and 2025-10-31. Cohort code: COPD_READMIT_30. Expected tool call get_patient_cohort with cohort_code 'COPD_READMIT_30', facility_ids ['AH-ORL-001','AH-NAP-002'], start_date '2025-09-01', end_date '2025-10-31', max_rows 50. Expected result: total_count 42, median_age 68, percent_female 54.8, common_zip3 '327'. Include example pseudo_mrn list entries (HX-7f3a9, HX-8c2d1, HX-5b6e4) with ages, zip3s, index admission and discharge dates, readmit_count_30d, and primary_drg codes (DRG-190, DRG-189). Recommended action: enroll top 25% high-readmit_count patients into a 7-day post-discharge telefollow and coordinate home health for those in zip3 '327'."
+    },
+    {
+      "id": "icu_capacity_morning_snapshot",
+      "name": "Morning Capacity and Nursing Shortfall Snapshot for AH-ORL-001",
+      "text": "Stakeholder: Chief Nursing Officer requests a snapshot 'as of' 2025-12-05T07:00:00-05:00 for AH-ORL-001 units MedSurg-3A and ICU-1 to assess staffed beds, occupancy, and nursing FTE shortfalls per shift. Expected tool call get_bed_capacity_and_staffing with facility_id 'AH-ORL-001', unit_ids ['MedSurg-3A','ICU-1'], as_of_datetime '2025-12-05T07:00:00-05:00'. Expected response (aligned to sample): MedSurg-3A bed_count 28, staffed_beds 26, occupancy 96.2%, nursing_fte_on_shift 9.0, required 11.0 (shortfall 2.0). ICU-1 staffed 12/12, occupancy 100%, no shortfall. Recommended immediate action: escalate staffing float pool to cover 2.0 FTE for MedSurg-3A and delay nonurgent discharges until afternoon if staffing not filled."
+    }
+  ],
+  "defaultScenarioId": "cardiology_readmit_q3"
+}

@@ -1,0 +1,460 @@
+{
+  "id": "patient_followup_questionnaire_agent",
+  "name": "Patient Follow-Up Questionnaire Agent",
+  "description": "Conversational agent that conducts structured follow-up questionnaires with patients about recent care (post-op, chronic condition check-ins, medication reconciliation). The agent always begins by confirming patient full name and date of birth, persists that identity, then iteratively submits each answer to the Q&A service which returns the next question until the questionnaire is complete. Emphasizes privacy, short clarifying questions, and never provides medical advice beyond escalating to clinician contact when flagged.",
+  "prompt": "You are a patient follow-up questionnaire agent. Always begin by greeting the user and confirming their full name and date of birth in a single concise prompt. Do not provide medical advice. Use tools for all stateful operations (persisting identity, submitting answers, getting the next question). Ask one clear question at a time, in plain non-technical language, and keep responses short (1–2 sentences). If a response indicates urgent symptoms (e.g., severe chest pain, breathlessness, heavy bleeding), instruct the user to seek immediate medical attention and offer to connect them to clinical staff. Never fabricate patient data or diagnoses. Respect privacy and avoid requesting unnecessary identifiers (SSN, full address) in conversation.",
+  "tools": [
+    {
+      "name": "record_demographics",
+      "description": "Persist the patient's confirmed identity (full name and DOB) and return a patient record handle and the first question to ask in the active questionnaire.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "full_name",
+          "dob",
+          "questionnaire_id",
+          "contact_channel"
+        ],
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "description": "Patient full legal name as spoken by the user"
+          },
+          "dob": {
+            "type": "string",
+            "description": "Date of birth in ISO format (YYYY-MM-DD)"
+          },
+          "questionnaire_id": {
+            "type": "string",
+            "description": "Identifier for the follow-up questionnaire to run (e.g., POSTOP-14D, CHRONIC-CKD-Q1)"
+          },
+          "contact_channel": {
+            "type": "string",
+            "enum": [
+              "phone",
+              "sms",
+              "video",
+              "portal"
+            ],
+            "description": "Preferred contact channel used for this session"
+          },
+          "clinic_id": {
+            "type": "string",
+            "description": "Optional clinic or site identifier"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ok",
+          "patient_id",
+          "questionnaire_session_id",
+          "next_question"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "patient_id": {
+            "type": "string",
+            "description": "Internal patient identifier (non-PHI for agent use)"
+          },
+          "questionnaire_session_id": {
+            "type": "string",
+            "description": "Session identifier for this questionnaire flow"
+          },
+          "next_question": {
+            "type": "object",
+            "required": [
+              "question_id",
+              "text",
+              "type"
+            ],
+            "properties": {
+              "question_id": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "boolean",
+                  "multiple_choice",
+                  "numeric",
+                  "text",
+                  "date"
+                ]
+              },
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "choice_id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "ok": true,
+        "patient_id": "PT-20260314-4892",
+        "questionnaire_session_id": "QS-POSTOP-000887",
+        "next_question": {
+          "question_id": "Q1-pain",
+          "text": "On a scale of 0 (no pain) to 10 (worst pain), what is your current pain level at the surgical site?",
+          "type": "numeric",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "submit_answer_and_get_next",
+      "description": "Submit a patient answer for the current question and receive either the next question or a finalization response (including any escalation flags).",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "questionnaire_session_id",
+          "question_id",
+          "answer"
+        ],
+        "properties": {
+          "questionnaire_session_id": {
+            "type": "string"
+          },
+          "question_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "object"
+            ],
+            "description": "Answer payload. For multiple_choice provide {choice_id: '...'}; for complex inputs include additional fields as needed."
+          },
+          "response_time": {
+            "type": "string",
+            "description": "ISO datetime when answer was given, optional"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional metadata like inferred urgency tags"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ok",
+          "next_step"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "next_step": {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "question",
+                  "complete",
+                  "escalate"
+                ]
+              },
+              "question": {
+                "type": "object",
+                "properties": {
+                  "question_id": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "boolean",
+                      "multiple_choice",
+                      "numeric",
+                      "text",
+                      "date"
+                    ]
+                  },
+                  "choices": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "choice_id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "final_summary": {
+                "type": "object",
+                "description": "When status is 'complete', summary of answers and next recommended step",
+                "properties": {
+                  "questionnaire_id": {
+                    "type": "string"
+                  },
+                  "completed_at": {
+                    "type": "string"
+                  },
+                  "answers_summary": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question_id": {
+                          "type": "string"
+                        },
+                        "answer": {}
+                      }
+                    }
+                  },
+                  "recommendation": {
+                    "type": "string"
+                  }
+                }
+              },
+              "escalation": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "clinical_contact",
+                      "emergency"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "contact_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "ok": true,
+        "next_step": {
+          "status": "question",
+          "question": {
+            "question_id": "Q2-wound_drain",
+            "text": "Is there any redness, increasing swelling, or pus at the incision site?",
+            "type": "multiple_choice",
+            "choices": [
+              {
+                "choice_id": "c1",
+                "label": "No"
+              },
+              {
+                "choice_id": "c2",
+                "label": "Yes - redness"
+              },
+              {
+                "choice_id": "c3",
+                "label": "Yes - swelling"
+              },
+              {
+                "choice_id": "c4",
+                "label": "Yes - pus/drainage"
+              }
+            ],
+            "required": true
+          }
+        }
+      }
+    },
+    {
+      "name": "finalize_questionnaire",
+      "description": "Mark the questionnaire session complete and produce a final summary. Optionally schedule a clinician follow-up if required.",
+      "argSchema": {
+        "type": "object",
+        "required": [
+          "questionnaire_session_id",
+          "patient_id"
+        ],
+        "properties": {
+          "questionnaire_session_id": {
+            "type": "string"
+          },
+          "patient_id": {
+            "type": "string"
+          },
+          "schedule_followup": {
+            "type": "object",
+            "properties": {
+              "requested": {
+                "type": "boolean"
+              },
+              "reason_code": {
+                "type": "string"
+              },
+              "preferred_dates": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "required": [
+          "ok",
+          "summary"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "questionnaire_session_id": {
+                "type": "string"
+              },
+              "patient_id": {
+                "type": "string"
+              },
+              "completed_at": {
+                "type": "string"
+              },
+              "answers_summary": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "question_id": {
+                      "type": "string"
+                    },
+                    "answer": {}
+                  }
+                }
+              },
+              "followup_scheduled": {
+                "type": "boolean"
+              },
+              "followup_appointment_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "sampleResult": {
+        "ok": true,
+        "summary": {
+          "questionnaire_session_id": "QS-POSTOP-000887",
+          "patient_id": "PT-20260314-4892",
+          "completed_at": "2026-03-28T14:22:00Z",
+          "answers_summary": [
+            {
+              "question_id": "Q1-pain",
+              "answer": 4
+            },
+            {
+              "question_id": "Q2-wound_drain",
+              "answer": "c1"
+            },
+            {
+              "question_id": "Q3-temp",
+              "answer": 98.6
+            }
+          ],
+          "followup_scheduled": true,
+          "followup_appointment_id": "APPT-CLIN-7721"
+        }
+      }
+    },
+    {
+      "name": "noop",
+      "description": "No-op tool used to persist ephemeral conversational context or emit an acknowledgement without changing questionnaire state.",
+      "argSchema": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "sampleResult": {
+        "ok": true,
+        "message": "context_saved"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "postop_14day_knee_replacement",
+      "name": "14-day post-op check for right knee replacement",
+      "text": "Patient: Maria Lopez, DOB 1959-04-02. Contact channel: phone. Clinic: ORTH-CLIN-09 (zip 33134). Questionnaire_id: POSTOP-14D. Appointment_id: APPT-ORTH-55921 on 2026-03-14. Expected flow: record_demographics called with full_name 'Maria Lopez', dob '1959-04-02', questionnaire_id 'POSTOP-14D', contact_channel 'phone', clinic_id 'ORTH-CLIN-09'. Tool returns patient_id 'PT-20260314-4892' and first question Q1-pain (numeric). Sequence of answers to be submitted: Q1-pain = 7 (numeric), Q2-wound_drain = 'c4' (Yes - pus/drainage), Q3-temp = 100.8 (numeric). After submitting Q2 with 'c4' tool submit_answer_and_get_next should return status 'escalate' with escalation.level 'clinical_contact', message 'Possible surgical site infection; recommend nurse triage within 2 hours', contact_id 'CLINIC-NURSE-331'. Finalize: finalize_questionnaire will be called with schedule_followup.requested true and preferred_dates ['2026-03-29','2026-03-30'] and notes referencing APPT-ORTH-55921; it returns followup_appointment_id 'APPT-CLIN-7721'."
+    },
+    {
+      "id": "chronic_ckd_monthly_checkin",
+      "name": "Monthly chronic kidney disease symptom check-in",
+      "text": "Patient: David Chen, DOB 1982-11-09. Contact channel: portal. Clinic: NEPH-CLIN-02 (zip 02139). Questionnaire_id: CHRONIC-CKD-MO. Last labs: eGFR 48 mL/min (lab_record LR-CKD-993). Expected flow: record_demographics called with full_name 'David Chen', dob '1982-11-09', questionnaire_id 'CHRONIC-CKD-MO', contact_channel 'portal', clinic_id 'NEPH-CLIN-02' returning patient_id 'PT-20251109-2017' and first question Q1-symptom_fatigue (boolean). Sequence: Q1-symptom_fatigue = false, Q2-swelling_legs = false, Q3-weight_change = 2.3 (numeric pounds), Q4-med_adherence = 'mc_yes' (multiple_choice: choices ['mc_yes','mc_partial','mc_no']). No escalation expected. After completion submit_answer_and_get_next returns status 'complete' with final_summary containing recommendation 'Continue current regimen; next lab due 2026-04-15' and finalize_questionnaire returns followup_scheduled false.",
+      "name_extra": "monthly_ckd"
+    },
+    {
+      "id": "med_reconciliation_senior",
+      "name": "Medication reconciliation for senior patient after discharge",
+      "text": "Patient: Evelyn Parker, DOB 1937-07-21. Contact channel: sms. Clinic: GERI-CLIN-01 (zip 11215). Questionnaire_id: MED-RECON-DISCH. Discharge on 2026-02-28 from facility HOSP-BK-101, discharge_id DIS-100442. Expected flow: record_demographics with full_name 'Evelyn Parker', dob '1937-07-21', questionnaire_id 'MED-RECON-DISCH', contact_channel 'sms', clinic_id 'GERI-CLIN-01' returns patient_id 'PT-19370721-0580' and first question Q1-current_meds (text). Known current meds to be reconciled: 'Lisinopril 10 mg once daily (SKU: MED-LIS-10MG), Warfarin 2 mg every other day (SKU: MED-WARF-2MG)'. Sequence: Q1-current_meds = the text listing those meds, Q2-dosing_issues = 'yes' (boolean) with details Q2a 'missed doses twice last week due to confusion', Q3-contact_preference = 'phone' (multiple_choice). submit_answer_and_get_next should flag non-urgent clinical_contact when patient reports missed doses: escalation.level 'clinical_contact', message 'Medication reconciliation requested; pharmacist call recommended', contact_id 'PHARM-CLINIC-440'. finalize_questionnaire will be called requesting schedule_followup.requested true with preferred_dates ['2026-03-02'] and notes referencing discharge_id DIS-100442, returning followup_appointment_id 'APPT-PHAR-909'."
+    }
+  ],
+  "defaultScenarioId": "postop_14day_knee_replacement"
+}

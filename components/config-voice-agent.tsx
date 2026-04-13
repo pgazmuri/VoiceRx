@@ -62,7 +62,15 @@ export function ConfigVoiceAgent({ onConfigMutated, activeConfigName, onClose }:
         throw new Error(json?.error || 'failed_to_load_voice_tools');
       }
       setInstructions(typeof json.instructions === 'string' ? json.instructions : '');
-      setTools(Array.isArray(json.tools) ? json.tools : []);
+      // Sanitize tools for Realtime API format: only type, name, description, parameters
+      const rawTools = Array.isArray(json.tools) ? json.tools : [];
+      const sanitizedTools = rawTools.map((t: any) => ({
+        type: 'function',
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }));
+      setTools(sanitizedTools);
       setLastEvent('Config editor tools refreshed.');
     } catch (err: any) {
       console.error('[config-voice-agent] spec load failed', err);
@@ -322,7 +330,7 @@ export function ConfigVoiceAgent({ onConfigMutated, activeConfigName, onClose }:
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const response = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
+      const response = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime-1.5', {
         method: 'POST',
         body: offer.sdp,
         headers: {
