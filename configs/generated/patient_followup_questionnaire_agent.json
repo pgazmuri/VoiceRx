@@ -1,18 +1,17 @@
 {
   "id": "patient_followup_questionnaire_agent",
   "name": "Patient Follow-Up Questionnaire Agent",
-  "description": "Conversational agent that conducts structured follow-up questionnaires with patients about recent care (post-op, chronic condition check-ins, medication reconciliation). The agent always begins by confirming patient full name and date of birth, persists that identity, then iteratively submits each answer to the Q&A service which returns the next question until the questionnaire is complete. Emphasizes privacy, short clarifying questions, and never provides medical advice beyond escalating to clinician contact when flagged.",
-  "prompt": "You are a patient follow-up questionnaire agent. Always begin by greeting the user and confirming their full name and date of birth in a single concise prompt. Do not provide medical advice. Use tools for all stateful operations (persisting identity, submitting answers, getting the next question). Ask one clear question at a time, in plain non-technical language, and keep responses short (1–2 sentences). If a response indicates urgent symptoms (e.g., severe chest pain, breathlessness, heavy bleeding), instruct the user to seek immediate medical attention and offer to connect them to clinical staff. Never fabricate patient data or diagnoses. Respect privacy and avoid requesting unnecessary identifiers (SSN, full address) in conversation.",
+  "description": "Conversational agent that conducts structured follow-up questionnaires with patients about recent care (post-op, chronic condition check-ins, medication reconciliation). The agent always begins by confirming patient full name and date of birth, persists that identity, then iteratively submits each answer to the Q&A service which returns the next question until the questionnaire is complete. Emphasizes privacy, short clarifying questions, and never provides medical advice beyond escalating to clinician contact when flagged. When the questionnaire completion response is returned, the agent should finish the call and say goodbye.",
+  "prompt": "You are a patient follow-up questionnaire agent. Always begin by greeting the user and confirming their full name and date of birth in a single concise prompt. Do not provide medical advice. Do not ask the user to choose or specify a questionnaire/form; rely on the demographics tool to determine and return the correct questionnaire and first question. Use tools for all stateful operations (persisting identity, submitting answers, getting the next question). Ask one clear question at a time, in plain non-technical language, and keep responses short (1–2 sentences). If a response indicates urgent symptoms (e.g., severe chest pain, breathlessness, heavy bleeding), instruct the user to seek immediate medical attention and offer to connect them to clinical staff. Never fabricate patient data or diagnoses. Respect privacy and avoid requesting unnecessary identifiers (SSN, full address) in conversation. When submit_answer_and_get_next indicates completion (it returns a message \"Questionaire complete\"), acknowledge completion briefly and end the conversation with a polite goodbye. Do not attempt any additional finalization steps.",
   "tools": [
     {
       "name": "record_demographics",
-      "description": "Persist the patient's confirmed identity (full name and DOB) and return a patient record handle and the first question to ask in the active questionnaire.",
+      "description": "Persist the patient's confirmed identity (full name and DOB) and return a patient record handle, the resolved questionnaire to run for this session, and the first question to ask.",
       "argSchema": {
         "type": "object",
         "required": [
           "full_name",
           "dob",
-          "questionnaire_id",
           "contact_channel"
         ],
         "properties": {
@@ -23,10 +22,6 @@
           "dob": {
             "type": "string",
             "description": "Date of birth in ISO format (YYYY-MM-DD)"
-          },
-          "questionnaire_id": {
-            "type": "string",
-            "description": "Identifier for the follow-up questionnaire to run (e.g., POSTOP-14D, CHRONIC-CKD-Q1)"
           },
           "contact_channel": {
             "type": "string",
@@ -49,6 +44,7 @@
         "required": [
           "ok",
           "patient_id",
+          "questionnaire_id",
           "questionnaire_session_id",
           "next_question"
         ],
@@ -59,6 +55,10 @@
           "patient_id": {
             "type": "string",
             "description": "Internal patient identifier (non-PHI for agent use)"
+          },
+          "questionnaire_id": {
+            "type": "string",
+            "description": "Identifier for the follow-up questionnaire selected for this session (e.g., POSTOP-14D, CHRONIC-CKD-Q1)"
           },
           "questionnaire_session_id": {
             "type": "string",
@@ -112,6 +112,7 @@
       "sampleResult": {
         "ok": true,
         "patient_id": "PT-20260314-4892",
+        "questionnaire_id": "POSTOP-14D",
         "questionnaire_session_id": "QS-POSTOP-000887",
         "next_question": {
           "question_id": "Q1-pain",
@@ -123,7 +124,7 @@
     },
     {
       "name": "submit_answer_and_get_next",
-      "description": "Submit a patient answer for the current question and receive either the next question or a finalization response (including any escalation flags).",
+      "description": "Submit a patient answer for the current question and receive either the next question or a finalization response (including any escalation flags). When the questionnaire is complete, this returns a message \"Questionaire complete\" and no further questions.",
       "argSchema": {
         "type": "object",
         "required": [
@@ -181,6 +182,10 @@
                   "escalate"
                 ]
               },
+              "message": {
+                "type": "string",
+                "description": "A human-readable message. On completion this will be \"Questionaire complete\"."
+              },
               "question": {
                 "type": "object",
                 "properties": {
@@ -221,7 +226,7 @@
               },
               "final_summary": {
                 "type": "object",
-                "description": "When status is 'complete', summary of answers and next recommended step",
+                "description": "When status is 'complete', optional summary of answers and next recommended step",
                 "properties": {
                   "questionnaire_id": {
                     "type": "string"
@@ -300,114 +305,6 @@
       }
     },
     {
-      "name": "finalize_questionnaire",
-      "description": "Mark the questionnaire session complete and produce a final summary. Optionally schedule a clinician follow-up if required.",
-      "argSchema": {
-        "type": "object",
-        "required": [
-          "questionnaire_session_id",
-          "patient_id"
-        ],
-        "properties": {
-          "questionnaire_session_id": {
-            "type": "string"
-          },
-          "patient_id": {
-            "type": "string"
-          },
-          "schedule_followup": {
-            "type": "object",
-            "properties": {
-              "requested": {
-                "type": "boolean"
-              },
-              "reason_code": {
-                "type": "string"
-              },
-              "preferred_dates": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "format": "date"
-                }
-              }
-            }
-          },
-          "notes": {
-            "type": "string"
-          }
-        }
-      },
-      "resultSchema": {
-        "type": "object",
-        "required": [
-          "ok",
-          "summary"
-        ],
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "summary": {
-            "type": "object",
-            "properties": {
-              "questionnaire_session_id": {
-                "type": "string"
-              },
-              "patient_id": {
-                "type": "string"
-              },
-              "completed_at": {
-                "type": "string"
-              },
-              "answers_summary": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "question_id": {
-                      "type": "string"
-                    },
-                    "answer": {}
-                  }
-                }
-              },
-              "followup_scheduled": {
-                "type": "boolean"
-              },
-              "followup_appointment_id": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "sampleResult": {
-        "ok": true,
-        "summary": {
-          "questionnaire_session_id": "QS-POSTOP-000887",
-          "patient_id": "PT-20260314-4892",
-          "completed_at": "2026-03-28T14:22:00Z",
-          "answers_summary": [
-            {
-              "question_id": "Q1-pain",
-              "answer": 4
-            },
-            {
-              "question_id": "Q2-wound_drain",
-              "answer": "c1"
-            },
-            {
-              "question_id": "Q3-temp",
-              "answer": 98.6
-            }
-          ],
-          "followup_scheduled": true,
-          "followup_appointment_id": "APPT-CLIN-7721"
-        }
-      }
-    },
-    {
       "name": "noop",
       "description": "No-op tool used to persist ephemeral conversational context or emit an acknowledgement without changing questionnaire state.",
       "argSchema": {
@@ -442,18 +339,18 @@
     {
       "id": "postop_14day_knee_replacement",
       "name": "14-day post-op check for right knee replacement",
-      "text": "Patient: Maria Lopez, DOB 1959-04-02. Contact channel: phone. Clinic: ORTH-CLIN-09 (zip 33134). Questionnaire_id: POSTOP-14D. Appointment_id: APPT-ORTH-55921 on 2026-03-14. Expected flow: record_demographics called with full_name 'Maria Lopez', dob '1959-04-02', questionnaire_id 'POSTOP-14D', contact_channel 'phone', clinic_id 'ORTH-CLIN-09'. Tool returns patient_id 'PT-20260314-4892' and first question Q1-pain (numeric). Sequence of answers to be submitted: Q1-pain = 7 (numeric), Q2-wound_drain = 'c4' (Yes - pus/drainage), Q3-temp = 100.8 (numeric). After submitting Q2 with 'c4' tool submit_answer_and_get_next should return status 'escalate' with escalation.level 'clinical_contact', message 'Possible surgical site infection; recommend nurse triage within 2 hours', contact_id 'CLINIC-NURSE-331'. Finalize: finalize_questionnaire will be called with schedule_followup.requested true and preferred_dates ['2026-03-29','2026-03-30'] and notes referencing APPT-ORTH-55921; it returns followup_appointment_id 'APPT-CLIN-7721'."
+      "text": "Patient: Maria Lopez, DOB 1959-04-02. Contact channel: phone. Clinic: ORTH-CLIN-09 (zip 33134). Appointment_id: APPT-ORTH-55921 on 2026-03-14. Expected flow: record_demographics called with full_name 'Maria Lopez', dob '1959-04-02', contact_channel 'phone', clinic_id 'ORTH-CLIN-09'. Tool resolves and returns questionnaire_id 'POSTOP-14D', patient_id 'PT-20260314-4892', and first question Q1-pain (numeric). Sequence of answers to be submitted: Q1-pain = 7 (numeric), Q2-wound_drain = 'c4' (Yes - pus/drainage), Q3-temp = 100.8 (numeric). After submitting Q2 with 'c4' submit_answer_and_get_next should return status 'escalate' with escalation.level 'clinical_contact', message 'Possible surgical site infection; recommend nurse triage within 2 hours', contact_id 'CLINIC-NURSE-331'. After Q3, submit_answer_and_get_next should return status 'complete' with message 'Questionaire complete'. The agent should acknowledge completion briefly and end the call politely."
     },
     {
       "id": "chronic_ckd_monthly_checkin",
       "name": "Monthly chronic kidney disease symptom check-in",
-      "text": "Patient: David Chen, DOB 1982-11-09. Contact channel: portal. Clinic: NEPH-CLIN-02 (zip 02139). Questionnaire_id: CHRONIC-CKD-MO. Last labs: eGFR 48 mL/min (lab_record LR-CKD-993). Expected flow: record_demographics called with full_name 'David Chen', dob '1982-11-09', questionnaire_id 'CHRONIC-CKD-MO', contact_channel 'portal', clinic_id 'NEPH-CLIN-02' returning patient_id 'PT-20251109-2017' and first question Q1-symptom_fatigue (boolean). Sequence: Q1-symptom_fatigue = false, Q2-swelling_legs = false, Q3-weight_change = 2.3 (numeric pounds), Q4-med_adherence = 'mc_yes' (multiple_choice: choices ['mc_yes','mc_partial','mc_no']). No escalation expected. After completion submit_answer_and_get_next returns status 'complete' with final_summary containing recommendation 'Continue current regimen; next lab due 2026-04-15' and finalize_questionnaire returns followup_scheduled false.",
+      "text": "Patient: David Chen, DOB 1982-11-09. Contact channel: portal. Clinic: NEPH-CLIN-02 (zip 02139). Last labs: eGFR 48 mL/min (lab_record LR-CKD-993). Expected flow: record_demographics called with full_name 'David Chen', dob '1982-11-09', contact_channel 'portal', clinic_id 'NEPH-CLIN-02'. Tool resolves and returns questionnaire_id 'CHRONIC-CKD-MO', patient_id 'PT-20251109-2017', and first question Q1-symptom_fatigue (boolean). Sequence: Q1-symptom_fatigue = false, Q2-swelling_legs = false, Q3-weight_change = 2.3 (numeric pounds), Q4-med_adherence = 'mc_yes' (multiple_choice: choices ['mc_yes','mc_partial','mc_no']). No escalation expected. After completion, submit_answer_and_get_next returns status 'complete' with message 'Questionaire complete' and may include a final_summary with recommendation 'Continue current regimen; next lab due 2026-04-15'. The agent should end the session with a brief confirmation and goodbye.",
       "name_extra": "monthly_ckd"
     },
     {
       "id": "med_reconciliation_senior",
       "name": "Medication reconciliation for senior patient after discharge",
-      "text": "Patient: Evelyn Parker, DOB 1937-07-21. Contact channel: sms. Clinic: GERI-CLIN-01 (zip 11215). Questionnaire_id: MED-RECON-DISCH. Discharge on 2026-02-28 from facility HOSP-BK-101, discharge_id DIS-100442. Expected flow: record_demographics with full_name 'Evelyn Parker', dob '1937-07-21', questionnaire_id 'MED-RECON-DISCH', contact_channel 'sms', clinic_id 'GERI-CLIN-01' returns patient_id 'PT-19370721-0580' and first question Q1-current_meds (text). Known current meds to be reconciled: 'Lisinopril 10 mg once daily (SKU: MED-LIS-10MG), Warfarin 2 mg every other day (SKU: MED-WARF-2MG)'. Sequence: Q1-current_meds = the text listing those meds, Q2-dosing_issues = 'yes' (boolean) with details Q2a 'missed doses twice last week due to confusion', Q3-contact_preference = 'phone' (multiple_choice). submit_answer_and_get_next should flag non-urgent clinical_contact when patient reports missed doses: escalation.level 'clinical_contact', message 'Medication reconciliation requested; pharmacist call recommended', contact_id 'PHARM-CLINIC-440'. finalize_questionnaire will be called requesting schedule_followup.requested true with preferred_dates ['2026-03-02'] and notes referencing discharge_id DIS-100442, returning followup_appointment_id 'APPT-PHAR-909'."
+      "text": "Patient: Evelyn Parker, DOB 1937-07-21. Contact channel: sms. Clinic: GERI-CLIN-01 (zip 11215). Discharge on 2026-02-28 from facility HOSP-BK-101, discharge_id DIS-100442. Expected flow: record_demographics with full_name 'Evelyn Parker', dob '1937-07-21', contact_channel 'sms', clinic_id 'GERI-CLIN-01'. Tool resolves and returns questionnaire_id 'MED-RECON-DISCH', patient_id 'PT-19370721-0580', and first question Q1-current_meds (text). Known current meds to be reconciled: 'Lisinopril 10 mg once daily (SKU: MED-LIS-10MG), Warfarin 2 mg every other day (SKU: MED-WARF-2MG)'. Sequence: Q1-current_meds = the text listing those meds, Q2-dosing_issues = 'yes' (boolean) with details Q2a 'missed doses twice last week due to confusion', Q3-contact_preference = 'phone' (multiple_choice). submit_answer_and_get_next should flag non-urgent clinical_contact when patient reports missed doses: escalation.level 'clinical_contact', message 'Medication reconciliation requested; pharmacist call recommended', contact_id 'PHARM-CLINIC-440'. Upon final question completion, submit_answer_and_get_next returns status 'complete' with message 'Questionaire complete'. The agent should politely confirm next steps and say goodbye."
     }
   ],
   "defaultScenarioId": "postop_14day_knee_replacement"
